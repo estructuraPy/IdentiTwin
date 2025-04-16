@@ -1,24 +1,18 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
 version = "0.0.1"
+description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
-    { name = "Ing. Angel Navarro-Mora M.Sc", email = "ahnavarro@itcr.ac.cr, ahnavarro@anmingenieria.com" },
-    { name = "Alvaro Perez-Mora", email = "alvaroenrique2001@estudiantec.cr" },
+    { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
+    { name = "Alvaro Perez-Mora", email = "alvaroenrique2001@estudiantec.cr" }
 ]
-
+license = { text = "MIT" }
 readme = "README.md"
-license = { file = "LICENSE" }
-classifiers = [
-  "Programming Language :: Python :: 3.12",
-  "License :: OSI Approved :: MIT License",
-]
-dependencies = []
-[project.urls]
-"Homepage" = "https://github.com/estructuraPy/IdentiTwin"
+requires-python = ">=3.8"
 
 [tool.setuptools]
 packages = ["identitwin"]
