@@ -75,16 +75,7 @@ Install IdentiTwin using pip:
    :maxdepth: 4
    :caption: Contents:
 
-   calibration
-   configurator
-   event_monitoring
-   performance_monitor
-   processing_analysis
-   processing_data
-   report_generator
-   state
-   system_monitoring
-   
+   modules
 
 Indices and tables
 ==================
