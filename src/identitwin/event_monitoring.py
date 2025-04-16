@@ -94,104 +94,155 @@ class EventMonitor:
         """Detect and record event data using trigger/detrigger mechanism."""
         if not sensor_data or "sensor_data" not in sensor_data:
             return False
-        
+
         try:
             self.pre_trigger_buffer.append(sensor_data)
             current_time = time.time()
-            
+
             # Extract and validate sensor data
             accel_data = sensor_data.get("sensor_data", {}).get("accel_data", [])
             lvdt_data = sensor_data.get("sensor_data", {}).get("lvdt_data", [])
-            
+
             if not accel_data and not lvdt_data:
                 return False
 
             # Process sensor data safely
             magnitude = 0
-            instantaneous_disp = 0
+            max_instantaneous_disp = 0 # Track maximum displacement across all LVDTs
 
             if accel_data and len(accel_data) > 0:
+                # Use the first accelerometer for magnitude calculation (or adapt if needed)
                 accel = accel_data[0]
                 if all(k in accel for k in ['x', 'y', 'z']):
                     magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
                     self.accel_buffer.append(magnitude)
                     self.moving_avg_accel = np.mean(self.accel_buffer)
 
-            if lvdt_data and len(lvdt_data) > 0:
-                instantaneous_disp = abs(lvdt_data[0].get("displacement", 0))
-                self.disp_buffer.append(instantaneous_disp)
+            if lvdt_data:
+                # Iterate through all LVDTs to find the maximum absolute displacement
+                for lvdt in lvdt_data:
+                    disp = abs(lvdt.get("displacement", 0))
+                    if not np.isnan(disp): # Ignore NaN values
+                        max_instantaneous_disp = max(max_instantaneous_disp, disp)
+
+                # Update moving average buffer with the maximum displacement found
+                self.disp_buffer.append(max_instantaneous_disp)
                 self.moving_avg_disp = np.mean(self.disp_buffer)
 
-            # Event detection logic
-            trigger_accel = self.thresholds.get("acceleration", 0.981)
-            trigger_disp = self.thresholds.get("displacement", 2.0)
-            
-            accel_trigger = magnitude > trigger_accel
-            lvdt_trigger = instantaneous_disp > trigger_disp
 
-            if accel_trigger or lvdt_trigger:
-                return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp)
+            # Event detection logic
+            trigger_accel_threshold = self.thresholds.get("acceleration", float('inf')) # Use infinity if not set
+            trigger_disp_threshold = self.thresholds.get("displacement", float('inf')) # Use infinity if not set
+
+            # Check if *any* sensor exceeds its trigger threshold
+            accel_triggered = magnitude > trigger_accel_threshold
+            # Check if the *maximum* displacement across LVDTs exceeds the threshold
+            lvdt_triggered = max_instantaneous_disp > trigger_disp_threshold
+
+            # Check detrigger conditions using moving averages
+            detrigger_accel_threshold = self.thresholds.get("detrigger_acceleration", trigger_accel_threshold * 0.5)
+            detrigger_disp_threshold = self.thresholds.get("detrigger_displacement", trigger_disp_threshold * 0.5)
+
+            # Trigger condition
+            if accel_triggered or lvdt_triggered:
+                # Pass the maximum displacement found for logging/handling if needed
+                return self._handle_event_trigger(sensor_data, current_time, magnitude, max_instantaneous_disp)
+            # Detrigger condition (only if currently recording)
             elif self.in_event_recording:
-                return self._handle_event_recording(sensor_data, current_time)
-                
-            return True
+                 # Check if *both* moving averages are below their detrigger thresholds
+                 accel_below_detrigger = self.moving_avg_accel < detrigger_accel_threshold
+                 disp_below_detrigger = self.moving_avg_disp < detrigger_disp_threshold
+
+                 # If both are below, handle potential end of event
+                 if accel_below_detrigger and disp_below_detrigger:
+                     return self._handle_event_detrigger(sensor_data, current_time)
+                 else:
+                     # Still above detrigger, continue recording
+                     self.last_trigger_time = current_time # Keep updating last trigger time while above detrigger
+                     self.current_event_data.append(sensor_data)
+                     return True # Indicate processing happened
+
+            # No trigger and not recording, just buffer
+            return True # Indicate processing happened (buffering)
+
 
         except Exception as e:
             self.error_count += 1
             if self.error_count >= self.max_errors:
                 logging.error(f"Multiple errors in event detection: {e}")
-                self.error_count = 0
-            return False
+                self.error_count = 0 # Reset after logging
+            # Optionally log the specific error
+            # logging.exception("Error during event detection:")
+            return False # Indicate error occurred
 
     def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement):
         """Handle event trigger logic"""
         try:
-            self.last_trigger_time = current_time
-            
+            self.last_trigger_time = current_time # Update last time a trigger condition was met
+
             if not self.in_event_recording:
-                print(f"\n*** NEW EVENT DETECTED at {sensor_data['timestamp']} ***")
+                print(f"\n*** NEW EVENT TRIGGERED at {sensor_data['timestamp']} ***")
+                print(f"    Trigger values: Accel Mag={magnitude:.3f}, Max Disp={displacement:.3f}")
                 self.in_event_recording = True
                 state.set_event_variable("is_event_recording", True)
-                state.set_event_variable("last_trigger_time", current_time)
+                state.set_event_variable("last_trigger_time", current_time) # Store initial trigger time
+                # Include pre-trigger buffer in the current event data
                 self.current_event_data = list(self.pre_trigger_buffer)
-            
-            self.current_event_data.append(sensor_data)
+                # Ensure the triggering sample is included if not already in buffer
+                if sensor_data not in self.current_event_data:
+                     self.current_event_data.append(sensor_data)
+            else:
+                 # Already recording, just append data
+                 self.current_event_data.append(sensor_data)
+
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in event trigger handling: {e}")
             return False
 
-    def _handle_event_recording(self, sensor_data, current_time):
-        """Handle ongoing event recording and check for completion"""
+    def _handle_event_detrigger(self, sensor_data, current_time):
+        """Handles the logic when moving averages fall below detrigger thresholds."""
         try:
-            self.current_event_data.append(sensor_data)
-            post_trigger_time = self.thresholds.get("post_event_time", 15.0)
-            
-            if current_time - self.last_trigger_time > post_trigger_time:
-                event_duration = len(self.current_event_data) * self.config.time_step_acceleration
+            self.current_event_data.append(sensor_data) # Add the current sample
+            post_trigger_duration = self.thresholds.get("post_event_time", 15.0)
+
+            # Check if enough time has passed since the *last* time a trigger condition was met
+            if current_time - self.last_trigger_time >= post_trigger_duration:
+                # Calculate event duration based on actual data points and sampling rate
+                # Use acceleration rate as it's likely higher or equal
+                event_duration_samples = len(self.current_event_data)
+                event_duration_time = event_duration_samples * self.config.time_step_acceleration # Approximate duration
+
                 min_duration = self.thresholds.get("min_event_duration", 2.0)
-                
-                if event_duration >= min_duration:
+
+                if event_duration_time >= min_duration:
                     try:
-                        self.event_data_buffer.put(self.current_event_data)
-                        self.event_count_ref[0] += 1
-                        event_time = self.current_event_data[0]["timestamp"]
-                        self._save_event_data(self.current_event_data, event_time)
-                        print(f"Event complete - duration={event_duration:.2f}s")
+                        # Save the event data
+                        event_start_time = self.current_event_data[0]["timestamp"]
+                        self._save_event_data(self.current_event_data, event_start_time)
+                        print(f"Event complete - duration={event_duration_time:.2f}s")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
-                
-                # Reset event state
+                else:
+                    print(f"Event discarded - duration ({event_duration_time:.2f}s) less than minimum ({min_duration}s)")
+
+                # Reset event state regardless of saving outcome
                 self.in_event_recording = False
                 self.current_event_data = []
-                self.pre_trigger_buffer.clear()
+                self.pre_trigger_buffer.clear() # Clear pre-trigger buffer for next event
                 state.set_event_variable("is_event_recording", False)
-            
+                # Reset moving averages? Optional, maybe better to let them decay naturally
+                # self.accel_buffer.clear()
+                # self.disp_buffer.clear()
+                # self.moving_avg_accel = 0.0
+                # self.moving_avg_disp = 0.0
+
+            # If not enough post-trigger time has passed, just continue recording
             return True
-            
+
         except Exception as e:
-            logging.error(f"Error in event recording handling: {e}")
+            logging.error(f"Error in event detrigger handling: {e}")
             return False
 
     def event_monitoring_thread(self):
