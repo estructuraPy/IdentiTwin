@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = []
 [project.urls]
-"Homepage" = "https://github.com/ingahnavarro/identitwin"
+"Homepage" = "https://github.com/estructuraPy/IdentiTwin"
 
 [tool.setuptools]
 packages = ["identitwin"]
