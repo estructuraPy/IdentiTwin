@@ -23,6 +23,6 @@ package-dir = {"" = "src"}
 [tool.setuptools.dynamic]
 # Specify the file containing the dependencies
 dependencies = {file = ["requirements.txt"]}
-
-[tool.setuptools.package-data]
+ackages = ["identitwin"]
+[tool.setuptools.package-data]package-dir = {"" = "src"}
 identitwin = ["tests/*.py"]
