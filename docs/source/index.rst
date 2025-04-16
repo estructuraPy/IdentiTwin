@@ -3,7 +3,7 @@
 Welcome to IdentiTwin's Documentation
 ===================================
 
-.. image:: https://raw.githubusercontent.com/ingahnavarro/identitwin/main/identitwin.png?token=GHSAT0AAAAAADAV35GU6V6GQZT2OUULRJIEZ774J5Q
+.. image::https://github.com/ingahnavarro/identitwin/raw/main/identitwin.png
    :alt: Identitwin logo
    :align: center
    :width: 200px
