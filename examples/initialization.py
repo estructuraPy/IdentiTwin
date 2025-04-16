@@ -330,16 +330,29 @@ def main():
         # Add early I2C check for hardware mode
         print("\nPerforming initial hardware checks...")
         try:
-            # Ensure hardware modules are available before trying to use them
+            # FIRST: Check if hardware modules were loaded successfully in configurator.py
             if not configurator._HARDWARE_AVAILABLE:
-                 raise ImportError("Hardware modules (board, busio, etc.) failed to load earlier.")
+                 # Display the specific error message from configurator
+                 error_details = configurator._HARDWARE_ERROR_MESSAGE or "Unknown hardware import error"
+                 print(f"  ERROR: Hardware interface modules failed to load.")
+                 print(f"  Details: {error_details}") # Show the specific error
+                 print("  Cannot proceed in hardware mode. Check installations and system compatibility.")
+                 print("  Common issues:")
+                 print("    - Missing libraries (run pip install -r requirements.txt or install manually)")
+                 print("    - Running on an incompatible OS (e.g., Windows without Blinka)")
+                 print("    - Incorrect Python environment")
+                 print("  Consider running in --simulation mode if hardware is unavailable.")
+                 sys.exit(1) # Exit if essential hardware modules are missing
+
+            # If modules loaded, proceed with I2C check
             import board # Already imported in configurator, but good practice here too
             import busio
             print("  Attempting to initialize I2C bus...")
+            # ... (rest of the I2C check logic remains the same) ...
             i2c = busio.I2C(board.SCL, board.SDA)
             print("  I2C bus initialized successfully.")
             while not i2c.try_lock():
-                pass
+                pass # Wait for lock
             try:
                 print("  Scanning I2C devices...")
                 addresses = i2c.scan()
@@ -350,7 +363,8 @@ def main():
             finally:
                 i2c.unlock()
         except Exception as i2c_err:
-            print(f"  ERROR during initial I2C check: {i2c_err}")
+            # This block now only catches errors during the I2C check itself
+            print(f"  ERROR during I2C check: {i2c_err}")
             print("  Please ensure I2C is enabled (raspi-config) and hardware is connected correctly.")
             # Exit if initial I2C check fails critically in hardware mode
             # Consider making this conditional or adding a '--force' flag if needed
