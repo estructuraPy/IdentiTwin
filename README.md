@@ -1,7 +1,7 @@
 # IdentiTwin
 
 <p align="center">
-  <img src="identitwin.png" alt="IdentiTwin Logo" width="200"/>
+  <img src="https://github.com/estructuraPy/IdentiTwin/raw/main/identitwin.png" alt="IdentiTwin Logo" width="200"/>
 </p>
 
 A Python library for structural monitoring and vibration analysis, developed by ANM Ingeniería.
