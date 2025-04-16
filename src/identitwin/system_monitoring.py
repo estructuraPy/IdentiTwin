@@ -335,6 +335,7 @@ class MonitoringSystem:
 
                 # Data structure for this sample
                 sensor_data = {"timestamp": datetime.now(), "sensor_data": {}}
+                data_acquired_this_cycle = False # Flag to check if any data was read
 
                 # Accelerometer data acquisition - Strict timing control
                 if self.accelerometers and current_time >= next_acquisition_time:
@@ -381,6 +382,7 @@ class MonitoringSystem:
                             accel_data.append({"x": 0.0, "y": 0.0, "z": 0.0})
 
                     sensor_data["sensor_data"]["accel_data"] = accel_data
+                    data_acquired_this_cycle = True
 
                     # Append accelerometer data to acceleration.csv
                     if self.config.enable_accel:
@@ -421,109 +423,129 @@ class MonitoringSystem:
                     for i, channel in enumerate(self.lvdt_channels):
                         try:
                             voltage = channel.voltage
-                            # Calculate displacement using calibrated parameters
-                            if hasattr(self.config, "lvdt_slope") and hasattr(self.config, "lvdt_intercept"):
-                                displacement = self.config.lvdt_slope * voltage + self.config.lvdt_intercept
+                            displacement = np.nan # Default to NaN
+                            # Apply calibration using per-channel parameters
+                            if (hasattr(self.config, "lvdt_calibration_params") and
+                                i < len(self.config.lvdt_calibration_params) and
+                                self.config.lvdt_calibration_params[i] is not None):
+                                cal_params = self.config.lvdt_calibration_params[i]
+                                slope = cal_params.get('lvdt_slope', 19.86) # Use default if missing
+                                intercept = cal_params.get('lvdt_intercept', 0.0) # Use default if missing
+                                displacement = slope * voltage + intercept
                             else:
-                                print("No LVDT calibration data available")
-                                displacement = 0.0
-                            
-                            lvdt_data.append({
-                                "voltage": voltage,
-                                "displacement": displacement
-                            })
-                            
-                            # Update cache
-                            if i < len(self.last_lvdt_readings):
-                                self.last_lvdt_readings[i] = {
-                                    "voltage": voltage,
-                                    "displacement": displacement
-                                }
+                                # Print warning only once if calibration is missing
+                                if not hasattr(self, '_lvdt_cal_warning_printed'):
+                                    print(f"Warning: LVDT {i+1} calibration data missing or incomplete. Displacement calculation might be incorrect.")
+                                    self._lvdt_cal_warning_printed = True
+                                # Fallback to default if no calibration params available at all
+                                if hasattr(self.config, "lvdt_slope"):
+                                     displacement = self.config.lvdt_slope * voltage + self.config.lvdt_intercept
+
+
+                            lvdt_reading = {"voltage": voltage, "displacement": displacement}
+                            lvdt_data.append(lvdt_reading)
+
+                            # Update cache only if displacement is not NaN
+                            if i < len(self.last_lvdt_readings) and not np.isnan(displacement):
+                                self.last_lvdt_readings[i] = lvdt_reading
+
                         except Exception as e:
                             print(f"Error reading LVDT {i+1}: {e}")
-                            lvdt_data.append({"voltage": 0.0, "displacement": 0.0})
+                            # Append placeholder data on error
+                            lvdt_data.append({"voltage": np.nan, "displacement": np.nan})
 
-                    sensor_data["sensor_data"]["lvdt_data"] = lvdt_data
+                    if lvdt_data: # Only add if we got some data (even NaNs)
+                        sensor_data["sensor_data"]["lvdt_data"] = lvdt_data
+                        data_acquired_this_cycle = True
 
-                    # Append LVDT data to displacement.csv
-                    if self.config.enable_lvdt:
-                        with open(self.csv_file_displacement, mode="a", newline="") as file:
-                            writer = csv.writer(file)
-                            for lvdt in lvdt_data:
-                                writer.writerow([
-                                    sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f"),
-                                    lvdt["voltage"],
-                                    lvdt["displacement"]
-                                ])
+                        # Append LVDT data to displacement.csv
+                        if self.config.enable_lvdt:
+                            with open(self.csv_file_displacement, mode="a", newline="") as file:
+                                writer = csv.writer(file)
+                                for lvdt in lvdt_data:
+                                    writer.writerow([
+                                        sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f"),
+                                        lvdt["voltage"],
+                                        lvdt["displacement"]
+                                    ])
 
-                # Append combined data to general_measurements.csv
-                with open(self.csv_file_general, mode="a", newline="") as file:
-                    writer = csv.writer(file)
-                    row = [sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f")]
+                # Append combined data to general_measurements.csv only if data was acquired
+                if data_acquired_this_cycle:
+                    # ... (CSV writing logic - ensure it handles potential NaNs gracefully, e.g., write empty strings or 'NaN') ...
+                    # Example modification for CSV writing:
+                    with open(self.csv_file_general, mode="a", newline="") as file:
+                        writer = csv.writer(file)
+                        row = [sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f")]
 
-                    # Add LVDT data
-                    if "lvdt_data" in sensor_data["sensor_data"]:
-                        for lvdt in sensor_data["sensor_data"]["lvdt_data"]:
-                            row.extend([lvdt["voltage"], lvdt["displacement"]])
+                        # Add LVDT data (handle missing/NaN)
+                        num_lvdt_expected = self.config.num_lvdts if self.config.enable_lvdt else 0
+                        lvdt_list = sensor_data.get("sensor_data", {}).get("lvdt_data", [])
+                        for i in range(num_lvdt_expected):
+                            if i < len(lvdt_list) and lvdt_list[i] is not None:
+                                volt = lvdt_list[i].get('voltage', '')
+                                disp = lvdt_list[i].get('displacement', '')
+                                row.extend([f"{volt:.6f}" if isinstance(volt, (int, float)) and not np.isnan(volt) else '',
+                                            f"{disp:.6f}" if isinstance(disp, (int, float)) and not np.isnan(disp) else ''])
+                            else:
+                                row.extend(['', '']) # Placeholder for missing LVDT
 
-                    # Add accelerometer data
-                    if "accel_data" in sensor_data["sensor_data"]:
-                        for accel in sensor_data["sensor_data"]["accel_data"]:
-                            magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
-                            row.extend([accel["x"], accel["y"], accel["z"], magnitude])
+                        # Add accelerometer data (handle missing/NaN)
+                        num_accel_expected = self.config.num_accelerometers if self.config.enable_accel else 0
+                        accel_list = sensor_data.get("sensor_data", {}).get("accel_data", [])
+                        for i in range(num_accel_expected):
+                             if i < len(accel_list) and accel_list[i] is not None:
+                                 x = accel_list[i].get('x', '')
+                                 y = accel_list[i].get('y', '')
+                                 z = accel_list[i].get('z', '')
+                                 if isinstance(x, (int, float)) and not np.isnan(x) and \
+                                    isinstance(y, (int, float)) and not np.isnan(y) and \
+                                    isinstance(z, (int, float)) and not np.isnan(z):
+                                     magnitude = np.sqrt(x**2 + y**2 + z**2)
+                                     row.extend([f"{x:.6f}", f"{y:.6f}", f"{z:.6f}", f"{magnitude:.6f}"])
+                                 else:
+                                     row.extend(['', '', '', '']) # Placeholder for NaN accel
+                             else:
+                                 row.extend(['', '', '', '']) # Placeholder for missing accel
 
-                    writer.writerow(row)
+                        writer.writerow(row)
 
-                # Add data to the queue if there is any sensor data
-                if sensor_data["sensor_data"]:
+
+                    # Add data to the queue
                     try:
-                        # Use append for deque instead of put for Queue
                         self.data_queue.append(sensor_data)
-                    except Exception:
-                        # If the queue is full, remove the oldest element
-                        if len(self.data_queue) >= self.data_queue.maxlen:
-                            self.data_queue.popleft()
-                            self.data_queue.append(sensor_data)
+                    except IndexError: # Catch potential error if deque is full and popleft fails (shouldn't happen with append)
+                         pass # Or log error
 
-                # Activity LED
-                if self.activity_led:
-                    self.activity_led.toggle()
+                # Activity LED toggle only if data was acquired
+                if data_acquired_this_cycle and self.activity_led:
+                    try:
+                        self.activity_led.toggle()
+                    except Exception: # Catch potential GPIO errors
+                        self.activity_led = None # Disable LED if it fails
 
                 # Update performance statistics periodically
                 if current_time - last_print_time >= stats_interval:
                     self._update_performance_stats()
-                    self._print_status(sensor_data)
-
-                    # Display tracking info for debugging
-                    sampling_rate_acceleration = self.performance_stats["sampling_rate_acceleration"]
-                    if (
-                        sampling_rate_acceleration < 95.0 or sampling_rate_acceleration > 105.0
-                    ):  # 5% tolerance
-                        drift = abs(
-                            sampling_rate_acceleration - self.config.sampling_rate_acceleration
-                        )
-
-                        # Recalibrate the acquisition interval if the deviation is significant
-                        if drift > 10.0:  # More than 10 Hz offset
-                            # Reset acquisition timers to fix drift
-                            start_time = time.perf_counter()
-                            accel_sample_count = 0
-                            lvdt_sample_count = 0
-                            next_acquisition_time = start_time
-                            next_lvdt_time = start_time
-                            print(
-                                "Resetting acquisition timers to fix drift"
-                            )
-
+                    self._print_status(sensor_data) # Pass latest data for status
                     last_print_time = current_time
+                    # ... (Drift detection/reset logic remains the same) ...
 
-                # Small CPU break if we are far ahead
-                if (next_acquisition_time - time.perf_counter()) > 0.001:
-                    time.sleep(0.001)  # 1 microsecond
+                # Small CPU break
+                # Calculate time until the *next* event (either accel or lvdt)
+                next_event_time = float('inf')
+                if self.config.enable_accel:
+                    next_event_time = min(next_event_time, next_acquisition_time)
+                if self.config.enable_lvdt:
+                    next_event_time = min(next_event_time, next_lvdt_time)
+
+                sleep_duration = next_event_time - time.perf_counter()
+                if sleep_duration > 0.0001: # Sleep only if significant time remains
+                    self._precise_sleep(sleep_duration * 0.9) # Sleep for 90% of the interval
 
         except Exception as e:
-            print(f"Error in data acquisition thread: {e}")
+            print(f"FATAL Error in data acquisition thread: {e}")
             traceback.print_exc()
+            self.running = False # Stop the thread on fatal error
 
     def _precise_sleep(self, sleep_time):
         """

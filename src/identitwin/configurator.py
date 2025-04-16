@@ -26,6 +26,8 @@ import platform
 from datetime import datetime
 import time
 import numpy as np
+import traceback # Import traceback
+
 # Check if we're running on a Raspberry Pi or similar platform
 try:
     # Only import hardware-specific modules if we're on a compatible platform
@@ -35,18 +37,25 @@ try:
     import busio
     from adafruit_ads1x15.analog_in import AnalogIn
     from mpu6050 import mpu6050
-except (ImportError, NotImplementedError):
-    # For simulation mode, just define variables to avoid errors
+    _HARDWARE_AVAILABLE = True
+except (ImportError, NotImplementedError, RuntimeError) as e:
+    # For simulation mode or if imports fail, define variables to avoid errors
     LED = None
     ADS = None
     board = None
     busio = None
     AnalogIn = None
     mpu6050 = None
+    _HARDWARE_AVAILABLE = False
+    print(f"Warning: Hardware modules not loaded ({e}). Running in simulation mode or hardware check needed.")
+
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
-print("Hardware detection: Raspberry Pi/Hardware Mode")
+if _HARDWARE_AVAILABLE:
+    print("Hardware detection: Raspberry Pi/Hardware Mode")
+else:
+    print("Hardware detection: Simulation Mode or Hardware Error")
 
 
 class SystemConfig:
@@ -206,57 +215,156 @@ class SystemConfig:
 
     def initialize_leds(self):
         """Initialize LED indicators for Raspberry Pi hardware."""
-        if LED is None:
+        if not _HARDWARE_AVAILABLE or LED is None or not self.gpio_pins or len(self.gpio_pins) < 2:
+            print("LEDs disabled: Hardware modules not available or configuration invalid.")
             return None, None
         try:
-            # Initialize real LEDs using gpiozero
+            print(f"Initializing LEDs on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             status_led = LED(self.gpio_pins[0])
             activity_led = LED(self.gpio_pins[1])
-            status_led.off()
+            status_led.off() # Ensure LEDs are off initially
             activity_led.off()
+            print("LEDs initialized successfully.")
             return status_led, activity_led
         except Exception as e:
             print(f"Warning: Could not initialize LEDs: {e}")
-            # Return None if LED initialization fails
+            traceback.print_exc()
             return None, None
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
+        if not _HARDWARE_AVAILABLE or ADS is None or busio is None or board is None:
+             print("ADS1115 cannot be created: Hardware modules not available.")
+             return None # Cannot create in simulation or if import failed
         try:
+            print("Initializing I2C bus...")
+            # Use SCL, SDA directly assuming board detection worked
             i2c = busio.I2C(board.SCL, board.SDA)
-            ads = ADS.ADS1115(i2c)
-            ads.gain = self.lvdt_gain  # Set gain as configured
+            print("I2C bus initialized.")
+
+            # Scan I2C bus for debugging
+            print("Scanning I2C devices...")
+            while not i2c.try_lock():
+                pass
+            try:
+                addresses = i2c.scan()
+                if addresses:
+                    print(f"  Found I2C devices at: {[hex(addr) for addr in addresses]}")
+                    # Check if the expected ADS1115 address (0x48 default) is present
+                    if 0x48 not in addresses:
+                         print("  Warning: ADS1115 default address (0x48) not found on I2C bus.")
+                else:
+                    print("  No I2C devices found. Check wiring and power.")
+            finally:
+                i2c.unlock()
+
+            print("Initializing ADS1115 ADC (address 0x48)...")
+            ads = ADS.ADS1115(i2c) # Assumes default address 0x48
+            ads.gain = self.lvdt_gain # Set gain (e.g., 2/3 for +/-6.144V)
+            print(f"ADS1115 gain set to {ads.gain} (+/- {6.144 / (2**(ads.gain-1)):.3f}V range)") # Show voltage range based on gain
+
+            # Perform a test read from the first channel to verify connection
+            print("Testing ADS1115 connection (reading P0)...")
+            test_channel = AnalogIn(ads, ADS.P0)
+            test_voltage = test_channel.voltage
+            test_value = test_channel.value
+            print(f"ADS1115 test read successful. Channel P0: {test_voltage:.4f}V (Raw: {test_value})")
+
             return ads
+        except ValueError as ve: # Catch specific error for address not found
+             print(f"FATAL: ADS1115 not found at address 0x48. Check wiring and address. Error: {ve}")
+             traceback.print_exc()
+             raise RuntimeError("Failed to initialize ADS1115: Device not found at 0x48") from ve
         except Exception as e:
-            print(f"Error initializing ADS1115: {e}")
-            return None
+            print(f"FATAL: Error initializing ADS1115: {e}")
+            traceback.print_exc()
+            raise RuntimeError(f"Failed to initialize ADS1115: {e}") from e
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
+        if ads is None or not _HARDWARE_AVAILABLE or AnalogIn is None:
+             print("LVDT channels cannot be created: ADS object invalid or hardware modules not available.")
+             return None
         try:
             channels = []
-            channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]  # ADS1115 has 4 channels
+            # Define the pin mapping based on the number of LVDTs expected
+            channel_pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
+
+            print(f"\nCreating {self.num_lvdts} LVDT channels...")
             for i in range(self.num_lvdts):
-                if i < len(channel_map):
-                    channels.append(AnalogIn(ads, channel_map[i]))
-                else:
-                    channels.append(AnalogIn(ads, channel_map[-1]))
+                if i >= len(channel_pins):
+                    print(f"  Warning: More LVDTs requested ({self.num_lvdts}) than available pins ({len(channel_pins)}). Skipping LVDT {i+1}.")
+                    continue
+
+                pin = channel_pins[i]
+                print(f"  Configuring LVDT {i+1} on pin P{i}...")
+                try:
+                    channel = AnalogIn(ads, pin)
+                    # Perform a test read
+                    voltage = channel.voltage
+                    raw_value = channel.value
+                    print(f"  LVDT {i+1} initial reading: {voltage:.4f}V (Raw: {raw_value})")
+                    channels.append(channel)
+                except Exception as chan_e:
+                     print(f"  Error configuring LVDT {i+1} on pin P{i}: {chan_e}")
+                     raise RuntimeError(f"Failed to configure LVDT {i+1}: {chan_e}") from chan_e
+
+            if len(channels) != self.num_lvdts:
+                 print(f"Warning: Expected {self.num_lvdts} LVDTs, but only {len(channels)} were successfully created.")
+            elif not channels:
+                 print("Error: No LVDT channels were successfully created.")
+                 return None # Return None if list is empty
+
             return channels
         except Exception as e:
-            print(f"Error creating LVDT channels: {e}")
-            return None
+            print(f"FATAL: Error creating LVDT channels: {e}")
+            traceback.print_exc()
+            raise RuntimeError(f"Failed to create LVDT channels: {e}") from e
 
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
+        if not _HARDWARE_AVAILABLE or mpu6050 is None:
+             print("Accelerometers cannot be created: Hardware modules not available.")
+             return None
         try:
             mpu_list = []
+            # Define the expected I2C addresses for the accelerometers
+            expected_addresses = [0x68, 0x69]
+
+            print(f"\nCreating {self.num_accelerometers} Accelerometer channels...")
             for i in range(self.num_accelerometers):
-                addr = 0x68 + i  # Assumes sensors on consecutive I2C addresses
-                mpu_list.append(mpu6050(addr))
+                if i >= len(expected_addresses):
+                    print(f"  Warning: More accelerometers requested ({self.num_accelerometers}) than defined addresses ({len(expected_addresses)}). Skipping Accelerometer {i+1}.")
+                    continue
+
+                addr = expected_addresses[i]
+                print(f"  Initializing Accelerometer {i+1} at address {hex(addr)}...")
+                try:
+                    # The mpu6050 library might handle I2C internally, no need to pass i2c object
+                    mpu = mpu6050(addr)
+                    # Perform a test read
+                    data = mpu.get_accel_data() # Use get_accel_data for raw readings
+                    print(f"  Accelerometer {i+1} initial reading: X={data['x']:.3f}, Y={data['y']:.3f}, Z={data['z']:.3f}")
+                    mpu_list.append(mpu)
+                except ValueError as ve: # Catch address error specifically if library raises it
+                     print(f"  Error initializing Accelerometer {i+1} at address {hex(addr)}: Device not found or communication error. {ve}")
+                     raise RuntimeError(f"Failed to initialize Accelerometer {i+1} at {hex(addr)}: {ve}") from ve
+                except Exception as mpu_e:
+                     print(f"  Error initializing Accelerometer {i+1} at address {hex(addr)}: {mpu_e}")
+                     traceback.print_exc()
+                     raise RuntimeError(f"Failed to initialize Accelerometer {i+1} at {hex(addr)}: {mpu_e}") from mpu_e
+
+            if len(mpu_list) != self.num_accelerometers:
+                 print(f"Warning: Expected {self.num_accelerometers} accelerometers, but only {len(mpu_list)} were successfully created.")
+            elif not mpu_list:
+                 print("Error: No accelerometers were successfully created.")
+                 return None # Return None if list is empty
+
             return mpu_list
         except Exception as e:
-            print(f"Error initializing accelerometers: {e}")
-            return None
+            print(f"FATAL: Error initializing accelerometers: {e}")
+            traceback.print_exc()
+            raise RuntimeError(f"Failed to initialize accelerometers: {e}") from e
 
 
 # Utility functions
