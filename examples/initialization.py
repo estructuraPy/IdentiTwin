@@ -292,17 +292,6 @@ def create_system_config():
 
 def main():
     """Main function to initialize and run the monitoring system."""
-    # First, make sure we clean up any lingering GPIO resources from previous runs
-    try:
-        from gpiozero import Device
-        print("Performing GPIO cleanup from possible previous runs...")
-        Device.close_all()
-        print("GPIO resources released.")
-    except ImportError:
-        pass  # gpiozero not available, likely running in simulation mode
-    except Exception as e:
-        print(f"Warning: Could not clean up GPIO resources: {e}")
-    
     # Correct indentation for the start of the function
     print_banner()
     args = parse_arguments()
