@@ -42,6 +42,45 @@ IdentiTwin is developed under the project ``Gemelo digital como herramienta de g
 
 ## Installation
 
+### Step-by-Step Setup (Raspberry Pi)
+
+1. Set execute permissions for setup script:
+```bash
+chmod +x setup_env/setup_env.sh
+```
+
+2. Run the setup script to create virtual environment:
+```bash
+./setup_env/setup_env.sh
+```
+
+3. Activate the virtual environment:
+```bash
+source venv/bin/activate
+```
+
+4. Install IdentiTwin library:
+```bash
+pip install identitwin
+```
+
+5. Configure and run initialization:
+```bash
+# Copy and modify the example initialization file
+cp examples/initialization.py my_initialization.py
+# Edit my_initialization.py according to your setup
+nano my_initialization.py
+# Run initialization
+python my_initialization.py
+```
+
+To deactivate the virtual environment when finished:
+```bash
+deactivate
+```
+
+### Standard Installation
+
 ```bash
 pip install identitwin
 ```
