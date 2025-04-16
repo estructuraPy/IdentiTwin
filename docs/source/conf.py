@@ -8,11 +8,11 @@ import sys
 sys.path.insert(0, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 
-project = 'Identitwin'
+project = 'IdentiTwin'
 copyright = '2025, Instituto Tecnológico de Costa Rica'
 authors = ['Angel Navarro-Mora', 'Alvaro Perez-Mora']
 author = ', '.join(authors)
-release = '0.1.0'
+release = '0.0.1'
 
 # -- General configuration ---------------------------------------------------
 
