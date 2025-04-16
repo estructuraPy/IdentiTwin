@@ -71,7 +71,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Copyright
 
 © 2025 ITCR. All rights reserved.
-
-## Version
-
-Current version: 0.1.0
