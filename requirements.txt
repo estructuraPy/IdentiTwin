@@ -8,16 +8,14 @@ tqdm>=4.62.0  # Progress bar visualization
 
 # Hardware interface
 adafruit-circuitpython-ads1x15>=2.2.0
-adafruit-circuitpython-mpu6050>=1.1.0
 
 # Optional dependencies
 scipy>=1.7.0  # For signal processing
-PyQt5>=5.15.0  # For Qt-based visualization
 sphinx_rtd_theme>=1.3.0
 
 # Additional dependencies
 gpiozero>=1.6.0
 lgpio         # Dependency for gpiozero on newer Raspberry Pi OS
 adafruit-blinka  # Compatibility layer for Adafruit libraries on Linux
-mpu6050-raspberrypi>=1.2.0 # Assuming this is the correct library for MPU6050
+mpu6050-raspberrypi>=1.2.0 # Use this for Raspberry Pi MPU6050 interface
 smbus2        # I2C communication library (alternative to smbus)

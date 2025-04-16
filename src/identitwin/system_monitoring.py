@@ -257,9 +257,15 @@ class MonitoringSystem:
 
         # Turn off LEDs
         if self.status_led:
-            self.status_led.off()
+            try:
+                self.status_led.off()
+            except Exception as e:
+                print(f"Error turning off Status LED: {e}")
         if self.activity_led:
-            self.activity_led.off()
+            try:
+                self.activity_led.off()
+            except Exception as e:
+                print(f"Error turning off Activity LED: {e}")
 
         # Update event count from reference
         if hasattr(self, "event_monitor"):
