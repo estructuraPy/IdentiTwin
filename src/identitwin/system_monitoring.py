@@ -276,41 +276,9 @@ class MonitoringSystem:
         Returns:
             None
         """
-        print("Initiating cleanup...") # Add print statement
         self.stop_monitoring()
-
-        # Explicitly close LEDs if they exist
-        if hasattr(self, 'status_led') and self.status_led:
-            try:
-                self.status_led.close()
-                print("Status LED closed.")
-            except Exception as e:
-                print(f"Error closing status LED: {e}")
-            finally:
-                 self.status_led = None # Ensure reference is removed
-
-        if hasattr(self, 'activity_led') and self.activity_led:
-            try:
-                self.activity_led.close()
-                print("Activity LED closed.")
-            except Exception as e:
-                print(f"Error closing activity LED: {e}")
-            finally:
-                 self.activity_led = None # Ensure reference is removed
-
-        # Close plots if matplotlib is used directly here (unlikely now)
         # Use plt.close directly instead of non-existent visualization.close_all_plots
-        # Check if plt was imported and might have figures open
-        try:
-            import matplotlib.pyplot as plt
-            plt.close("all")
-            print("Closed plot windows.")
-        except ImportError:
-            pass # Matplotlib might not be used directly
-        except Exception as e:
-            print(f"Error closing plot windows: {e}")
-
-
+        plt.close("all")
         print("Resources cleaned up.")
 
     def wait_for_completion(self):

@@ -28,9 +28,6 @@ import time
 import numpy as np
 import traceback # Import traceback
 
-# Global variable to store the specific hardware error message
-_HARDWARE_ERROR_MESSAGE = None
-
 # Check if we're running on a Raspberry Pi or similar platform
 try:
     # Only import hardware-specific modules if we're on a compatible platform
@@ -50,9 +47,7 @@ except (ImportError, NotImplementedError, RuntimeError) as e:
     AnalogIn = None
     mpu6050 = None
     _HARDWARE_AVAILABLE = False
-    # Store the specific error message
-    _HARDWARE_ERROR_MESSAGE = str(e)
-    print(f"Warning: Hardware modules not loaded ({_HARDWARE_ERROR_MESSAGE}). Running in simulation mode or hardware check needed.")
+    print(f"Warning: Hardware modules not loaded ({e}). Running in simulation mode or hardware check needed.")
 
 
 # Print platform information
@@ -220,15 +215,13 @@ class SystemConfig:
 
     def initialize_leds(self):
         """Initialize LED indicators for Raspberry Pi hardware."""
-        status_led = None # Initialize to None
-        activity_led = None # Initialize to None
         if not _HARDWARE_AVAILABLE or LED is None or not self.gpio_pins or len(self.gpio_pins) < 2:
             print("LEDs disabled: Hardware modules not available or configuration invalid.")
             return None, None
         try:
             print(f"Initializing LEDs on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             status_led = LED(self.gpio_pins[0])
-            activity_led = LED(self.gpio_pins[1]) # Try initializing the second LED
+            activity_led = LED(self.gpio_pins[1])
             status_led.off() # Ensure LEDs are off initially
             activity_led.off()
             print("LEDs initialized successfully.")
@@ -236,19 +229,6 @@ class SystemConfig:
         except Exception as e:
             print(f"Warning: Could not initialize LEDs: {e}")
             traceback.print_exc()
-            # Cleanup if partially initialized
-            if status_led:
-                try:
-                    status_led.close()
-                    print("Closed status LED due to initialization error.")
-                except Exception as close_e:
-                    print(f"Error closing status LED: {close_e}")
-            if activity_led: # Should not happen if status_led failed, but good practice
-                 try:
-                     activity_led.close()
-                     print("Closed activity LED due to initialization error.")
-                 except Exception as close_e:
-                     print(f"Error closing activity LED: {close_e}")
             return None, None
 
     def create_ads1115(self):
