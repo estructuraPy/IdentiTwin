@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
+<<<<<<< Updated upstream
+version = "0.0.3"
+=======
 version = "0.0.7"
+>>>>>>> Stashed changes
 description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
