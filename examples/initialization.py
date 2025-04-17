@@ -14,7 +14,6 @@ from datetime import datetime
 import matplotlib
 import matplotlib.pyplot as plt  # Import pyplot
 import traceback # Import traceback
-import queue # Add queue import
 
 # Set a suitable interactive backend BEFORE importing pyplot or other matplotlib modules
 # Try TkAgg first, fall back if needed. Avoid 'agg' here for live plots.
@@ -102,35 +101,58 @@ def simulated_create_lvdt_channels(self, ads):
             self.amplitude = 5.0 # mm
             self.frequency = 0.1 # Hz
             self.slope = slope
+            self._raw_value = 0 # Internal state for raw value
 
-        @property
-        def voltage(self):
+        def _calculate_displacement(self):
+            """Calculates the simulated displacement."""
             current_time = time.time()
             elapsed_time = current_time - self.cycle_start_time
-            
             # Calculate displacement based on a sine wave
             # Add some phase shift based on channel index for variety
             phase_shift = self.channel * (np.pi / self.num_lvdts)
             displacement = self.amplitude * math.sin(2 * np.pi * self.frequency * elapsed_time + phase_shift)
-
             # Add small random noise
             noise = np.random.normal(0, 0.1) # Gaussian noise with std dev 0.1mm
             displacement += noise
+            return displacement
 
+        def _update_raw_value(self):
+            """Updates the internal raw value based on simulated displacement."""
+            displacement = self._calculate_displacement()
             # Convert displacement to voltage using the slope
             # Avoid division by zero if slope is zero
             voltage = displacement / self.slope if self.slope != 0 else 0.0
+            # Simulate raw value based on voltage (reverse the real calculation)
+            # voltage = (raw_value * 0.1875) / 1000.0
+            # raw_value = (voltage * 1000.0) / 0.1875
+            # Clamp the raw value to the typical 16-bit ADC range
+            simulated_raw = int((voltage * 1000.0) / 0.1875)
+            self._raw_value = max(-32768, min(simulated_raw, 32767))
+
+        @property
+        def voltage(self):
+            """Calculates voltage from the simulated raw value, mimicking the real sensor."""
+            self._update_raw_value() # Ensure raw value is current
+            # Calculate voltage from raw value using the provided formula
+            voltage = (self._raw_value * 0.1875) / 1000.0
             self.last_voltage = voltage
             return voltage
 
         @property
         def raw_value(self):
-            # Simulate raw value based on voltage (assuming some ADC scaling)
-            # This is just an approximation
-            return int(self.voltage * (32767 / 6.144)) # Example scaling for ADS1115
+            """Returns the simulated raw ADC value."""
+            self._update_raw_value() # Ensure raw value is current
+            return self._raw_value
+
+        # Keep the 'value' property for compatibility if needed, maps to raw_value
+        @property
+        def value(self):
+            """Alias for raw_value for potential compatibility."""
+            return self.raw_value
 
     # Ensure num_lvdts is available in the class instance
     SimulatedAnalogIn.num_lvdts = self.num_lvdts
+    # Correct the list comprehension syntax
     return [SimulatedAnalogIn(ads, i, LVDT_SLOPES[i] if i < len(LVDT_SLOPES) else 19.86) for i in range(self.num_lvdts)]
 
 def simulated_create_accelerometers(self):
