@@ -9,36 +9,29 @@ This module provides real-time monitoring and detection of structural events bas
 Key Features:
 - Continuous sensor data monitoring
 - Pre-trigger and post-trigger data buffering
-- Event data persistence and analysis
+- Event data persistence
 - Multi-threaded event processing
 - Moving average filtering for noise reduction
 - Adaptive trigger/detrigger mechanism
-
-Classes:
-    EventMonitor: Main class for event detection and handling
-
-The module integrates with the data processing and analysis modules for complete
-event lifecycle management from detection to analysis and storage.
 """
 
 import os
-import csv
 import time
 import queue
 import traceback
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import logging
 from collections import deque
 from datetime import datetime
 
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Ensure Agg backend for non-interactive environments
+import matplotlib.pyplot as plt
+
 from . import state
-from .processing_data import read_lvdt_data
 from . import processing_analysis
 
-# event_monitoring.py
+
 class EventMonitor:
     """Monitors events based on sensor data and saves relevant information."""
 
@@ -48,13 +41,10 @@ class EventMonitor:
 
         Args:
             config: The system configuration object.
-            data_queue: A queue containing sensor data.
+            data_queue: A deque containing sensor data.
             thresholds: A dictionary of thresholds for event detection.
-            running_ref: A reference to a boolean indicating whether the system is running.
-            event_count_ref: A reference to an integer tracking the number of events.
-
-        Returns:
-            None
+            running_ref: A shared boolean indicating whether the system is running.
+            event_count_ref: A shared integer tracking the number of events.
 
         Assumptions:
             - The configuration object is properly set up.
@@ -68,45 +58,51 @@ class EventMonitor:
         self.thresholds = thresholds
         self.running_ref = running_ref
         self.event_count_ref = event_count_ref
-        self.event_in_progress = False
-        self.event_data_buffer = queue.Queue(maxsize=1000)
-        
+
         self.in_event_recording = False
         self.current_event_data = []
-        self.pre_trigger_buffer = deque(maxlen=1000)  # adjust buffer size as needed
-        self.last_trigger_time = 0
-        
-        # Initialize moving averages with deque buffers
-        window_size = int(0.5 * config.sampling_rate_acceleration)  # 0.5 segundos de muestras
-        self.accel_buffer = deque(maxlen=200)
+        self.pre_trigger_buffer = deque(maxlen=1000)
+
+        # Moving averages
+        window_size = int(0.5 * config.sampling_rate_acceleration)
+        self.accel_buffer = deque(maxlen=window_size)
         self.disp_buffer = deque(maxlen=10)
         self.moving_avg_accel = 0.0
         self.moving_avg_disp = 0.0
 
-        # Initialize event count in state with current value
+        # Initialize event state
         state.set_event_variable("event_count", event_count_ref[0])
         state.set_event_variable("is_event_recording", False)
-        
+
         self.error_count = 0
-        self.max_errors = 100  # Maximum number of consecutive errors before warning
+        self.max_errors = 100
 
     def detect_event(self, sensor_data):
-        """Detect and record event data using trigger/detrigger mechanism."""
+        """
+        Detects and records event data using a trigger/detrigger mechanism.
+
+        Args:
+            sensor_data: Dictionary containing sensor data, including 'timestamp', 'accel_data', and 'lvdt_data'.
+
+        Returns:
+            True if processed successfully, False otherwise.
+
+        Assumptions:
+            - Sensor data is in a consistent format.
+        """
         if not sensor_data or "sensor_data" not in sensor_data:
             return False
-        
+
         try:
             self.pre_trigger_buffer.append(sensor_data)
             current_time = time.time()
-            
-            # Extract and validate sensor data
+
             accel_data = sensor_data.get("sensor_data", {}).get("accel_data", [])
             lvdt_data = sensor_data.get("sensor_data", {}).get("lvdt_data", [])
-            
+
             if not accel_data and not lvdt_data:
                 return False
 
-            # Process sensor data safely
             magnitude = 0
             instantaneous_disp = 0
 
@@ -122,18 +118,17 @@ class EventMonitor:
                 self.disp_buffer.append(instantaneous_disp)
                 self.moving_avg_disp = np.mean(self.disp_buffer)
 
-            # Event detection logic
             trigger_accel = self.thresholds.get("acceleration", 0.981)
             trigger_disp = self.thresholds.get("displacement", 2.0)
-            
+
             accel_trigger = magnitude > trigger_accel
             lvdt_trigger = instantaneous_disp > trigger_disp
 
             if accel_trigger or lvdt_trigger:
-                return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp)
+                return self._handle_event_trigger(sensor_data, current_time)
             elif self.in_event_recording:
                 return self._handle_event_recording(sensor_data, current_time)
-                
+
             return True
 
         except Exception as e:
@@ -143,53 +138,61 @@ class EventMonitor:
                 self.error_count = 0
             return False
 
-    def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement):
-        """Handle event trigger logic"""
+    def _handle_event_trigger(self, sensor_data, current_time):
+        """Handles event trigger logic.
+
+        Args:
+            sensor_data: The data that triggered the event.
+            current_time: The time the event was triggered.
+
+        Returns:
+            True if the trigger was handled successfully, False otherwise.
+        """
         try:
-            self.last_trigger_time = current_time
-            
             if not self.in_event_recording:
                 print(f"\n*** NEW EVENT DETECTED at {sensor_data['timestamp']} ***")
                 self.in_event_recording = True
                 state.set_event_variable("is_event_recording", True)
-                state.set_event_variable("last_trigger_time", current_time)
                 self.current_event_data = list(self.pre_trigger_buffer)
-            
+
             self.current_event_data.append(sensor_data)
+            self.last_trigger_time = current_time
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in event trigger handling: {e}")
             return False
 
     def _handle_event_recording(self, sensor_data, current_time):
-        """Handle ongoing event recording and check for completion"""
+        """Handles ongoing event recording and checks for completion.
+
+        Args:
+            sensor_data: Current sensor data.
+            current_time: Current time.
+
+        Returns:
+            True if the recording was handled successfully, False otherwise.
+        """
         try:
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
-            
+
             if current_time - self.last_trigger_time > post_trigger_time:
                 event_duration = len(self.current_event_data) * self.config.time_step_acceleration
                 min_duration = self.thresholds.get("min_event_duration", 2.0)
-                
+
                 if event_duration >= min_duration:
                     try:
-                        self.event_data_buffer.put(self.current_event_data)
-                        self.event_count_ref[0] += 1
                         event_time = self.current_event_data[0]["timestamp"]
                         self._save_event_data(self.current_event_data, event_time)
+                        self.event_count_ref[0] += 1
                         print(f"Event complete - duration={event_duration:.2f}s")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
-                
-                # Reset event state
-                self.in_event_recording = False
-                self.current_event_data = []
-                self.pre_trigger_buffer.clear()
-                state.set_event_variable("is_event_recording", False)
-            
+
+                self._reset_event_state()
             return True
-            
+
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
             return False
@@ -198,55 +201,68 @@ class EventMonitor:
         """Thread function for monitoring events."""
         while self.running_ref:
             try:
-                if not self.data_queue:
-                    time.sleep(0.001)
+                sensor_data = self.data_queue.popleft() if self.data_queue else None
+
+                if sensor_data is None:
+                    time.sleep(0.001)  # Queue is empty
                     continue
-                    
-                sensor_data = self.data_queue.popleft()
+
                 if not self.detect_event(sensor_data):
                     continue
-                    
+
             except Exception as e:
                 logging.error(f"Error in monitoring thread: {e}")
                 time.sleep(0.1)  # Prevent tight error loop
-                
+
         self._cleanup_on_exit()
 
+    def _reset_event_state(self):
+        """Resets the event state to prepare for a new event."""
+        self.in_event_recording = False
+        self.current_event_data = []
+        self.pre_trigger_buffer.clear()
+        state.set_event_variable("is_event_recording", False)
+
     def _cleanup_on_exit(self):
-        """Clean up resources when thread exits"""
+        """Cleans up resources when the thread exits."""
         try:
             if self.in_event_recording and self.current_event_data:
-                self._finalize_event()
+                event_time = self.current_event_data[0]["timestamp"]
+                self._save_event_data(self.current_event_data, event_time)
+
         except Exception as e:
             logging.error(f"Error during cleanup: {e}")
 
     def _save_event_data(self, event_data, start_time):
-        """Save event data to CSV file and generate plots."""
+        """
+        Saves event data to a CSV file and generates plots.
+
+        Args:
+            event_data: The data associated with the event.
+            start_time: The timestamp of the event start.
+
+        Returns:
+            True if the event data was saved successfully, False otherwise.
+
+        Assumptions:
+            - processing_analysis.save_event_data function exists and properly handles event data saving.
+        """
         try:
-            # Initialize tracking variables
-            seen_timestamps = set()
             processed_data = []
-            sample_count = 0
-            
-            # Process each data point
+            seen_timestamps = set()
+
             for data in event_data:
                 if 'timestamp' not in data:
                     continue
-                    
+
                 if data['timestamp'] not in seen_timestamps:
                     seen_timestamps.add(data['timestamp'])
-                    
-                    # Add expected time based on sample number
-                    expected_time = sample_count * (1.0 / self.config.sampling_rate_acceleration)
-                    data['expected_time'] = expected_time
                     processed_data.append(data)
-                    sample_count += 1
 
             if not processed_data:
                 logging.error("No valid data to save")
                 return False
 
-            # Save processed data
             report_file = processing_analysis.save_event_data(
                 event_data=processed_data,
                 start_time=start_time,
@@ -267,7 +283,16 @@ class EventMonitor:
             return False
 
     def _generate_plots(self, event_data, event_dir):
-        """Generates plots for acceleration and displacement using thread-safe approach."""
+        """
+        Generates plots for acceleration and displacement in a thread-safe manner.
+
+        Args:
+            event_data: The data to be plotted.
+            event_dir: The directory to save the plots.
+
+        Assumptions:
+            - The data contains 'timestamp', 'accel_data', and 'lvdt_data'.
+        """
         timestamps = []
         accel_magnitudes = []
         displacements = []
@@ -277,20 +302,14 @@ class EventMonitor:
                 timestamps.append(entry["timestamp"])
 
                 accel_magnitude = 0
-                if (
-                    "sensor_data" in entry
-                    and "accel_data" in entry["sensor_data"]
-                ):
+                if "sensor_data" in entry and "accel_data" in entry["sensor_data"]:
                     accel = entry["sensor_data"]["accel_data"][0]
                     accel_magnitude = np.sqrt(
                         accel["x"] ** 2 + accel["y"] ** 2 + accel["z"] ** 2
                     )
 
                 displacements_value = 0
-                if (
-                    "sensor_data" in entry
-                    and "lvdt_data" in entry["sensor_data"]
-                ):
+                if "sensor_data" in entry and "lvdt_data" in entry["sensor_data"]:
                     displacements_value = entry["sensor_data"]["lvdt_data"][0]["displacement"]
 
                 accel_magnitudes.append(accel_magnitude)
@@ -303,20 +322,18 @@ class EventMonitor:
                 logging.error(f"Error processing data for plotting: {e}")
                 continue
 
-        # Check if we have any data to plot
         if not timestamps or not accel_magnitudes or not displacements:
             logging.warning("No data to generate plots.")
             return
 
         try:
-            # Calculate expected timestamps based on acceleration rate
             sample_count = len(timestamps)
             relative_timestamps = [i * self.config.time_step_acceleration for i in range(sample_count)]
 
-            # Use a thread-safe approach without pyplot
+            # Use thread-safe approach without pyplot
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-            
+
             # Create acceleration plot
             fig = Figure(figsize=(10, 6))
             canvas = FigureCanvas(fig)
@@ -328,7 +345,7 @@ class EventMonitor:
             ax.grid(True)
             fig.tight_layout()
             fig.savefig(os.path.join(event_dir, "acceleration_plot.png"))
-            
+
             # Create displacement plot with a new figure
             fig = Figure(figsize=(10, 6))
             canvas = FigureCanvas(fig)
@@ -345,28 +362,9 @@ class EventMonitor:
             logging.error(f"Error generating plots: {e}")
             traceback.print_exc()
 
-    def _finalize_event(self):
-        """Helper method to finalize and save event data."""
-        try:
-            event_time = self.current_event_data[0]["timestamp"]
-            if self._save_event_data(self.current_event_data, event_time):
-                # Only increment counter if event was successfully saved
-                self.event_count_ref[0] += 1
-                state.set_event_variable("event_count", self.event_count_ref[0])
-                print(f"Event {self.event_count_ref[0]} successfully recorded and saved")
-        except Exception as e:
-            print(f"Error saving event: {e}")
-        
-        # Reset all event state
-        self.in_event_recording = False
-        self.current_event_data = []
-        self.pre_trigger_buffer.clear()
-        self.last_detrigger_time = 0
-        self.min_duration_met = False
-        state.set_event_variable("is_event_recording", False)
 
 def print_event_banner():
-    """Print a  banner when the event starts"""
+    """Prints a banner when the event starts."""
     banner = """
 ===============================================================================
     Event is starting, please wait...
@@ -374,4 +372,4 @@ def print_event_banner():
 ===============================================================================
     """
     print(banner)
-    time.sleep(2)  # Pause for 2 seconds
+    time.sleep(2)
