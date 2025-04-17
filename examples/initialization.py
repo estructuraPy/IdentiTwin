@@ -43,8 +43,8 @@ NUM_LVDTS = 2
 NUM_ACCELS = 4
 LVDT_SLOPES = [19.86, 19.85]
 
-ACCEL_TRIGGER_THRESHOLD = 0.981  # m/s2 (0.1g)
-ACCEL_DETRIGGER_THRESHOLD = 0.589  # m/s2 (60% of trigger threshold)
+ACCEL_TRIGGER_THRESHOLD = 0.981  # m/s^2 (0.1g)
+ACCEL_DETRIGGER_THRESHOLD = 0.589  # m/s^2 (60% of trigger threshold)
 
 DISPLACEMENT_TRIGGER_THRESHOLD = 10.0  # mm
 DISPLACEMENT_DETRIGGER_THRESHOLD = 5.0  # mm
@@ -71,10 +71,10 @@ def print_banner():
 ===============================================================================
 
     Developed by:
-     - Ing. Angel Navarro-Mora M.Sc, School of Construction Engineering
-     - Alvaro Perez-Mora, School of Electronic Engineering
+     - Ing. Angel Navarro-Mora M.Sc, Escuela de Ingeniería en Construcción
+     - Alvaro Perez-Mora, Escuela de Ingeniería Electrónica
 
-    Instituto Tecnologico de Costa Rica
+    Instituto Tecnologico de Costa Rica, 2025
 
     """
     print(banner)
@@ -539,3 +539,4 @@ def main():
 if __name__ == "__main__":
     main()
 
+    

@@ -1,21 +1,25 @@
 """
-Configuration Management Module for IdentiTwin.
+Configuration management module for the  monitoring system.
 
-Handles the setup and storage of all system-wide configuration parameters.
-Detects the platform (Raspberry Pi vs. other) to conditionally import hardware
-libraries and provides methods for initializing hardware components like LEDs,
-ADC (ADS1115), and accelerometers (MPU6050).
+This module handles all system-wide configuration including:
+- Hardware setup and initialization
+- Sampling rates and timing parameters
+- Event detection thresholds
+- Data storage paths and organization
+- Sensor calibration parameters
+- System operational modes
 
 Key Features:
-- Centralized configuration management via the `SystemConfig` class.
-- Platform detection for hardware-specific initialization.
-- Dynamic creation of output directory structures based on date.
-- Configuration of sensor enablement, sampling rates, event thresholds, and timing.
-- Initialization methods for hardware components (LEDs, ADC, Accelerometers).
-- Default values and validation for key parameters.
+- Dynamic configuration based on available hardware
+- Platform-specific adaptations (Raspberry Pi vs simulation)
+- Automatic directory structure creation
+- LED indicator management
+- ADC (ADS1115) configuration for LVDT sensors
+- MPU6050 accelerometer setup
+- Comprehensive parameter validation
 
 Classes:
-    SystemConfig: Holds all configuration parameters and provides initialization methods.
+    SystemConfig: Main configuration class with all system parameters
 """
 import os
 import platform
@@ -46,53 +50,7 @@ print("Hardware detection: Raspberry Pi/Hardware Mode")
 
 
 class SystemConfig:
-    """
-    Configuration class holding all parameters for the IdentiTwin monitoring system.
-
-    Manages settings related to sensor enablement, sampling rates, data storage,
-    event detection, hardware interfaces (GPIO, I2C), and calibration. Provides
-    methods to initialize hardware components based on the configuration.
-
-    Attributes:
-        output_dir (str): Base directory for all output files (logs, events, reports).
-        events_dir (str): Subdirectory for storing individual event data.
-        logs_dir (str): Subdirectory for log files (performance, calibration).
-        reports_dir (str): Subdirectory for summary reports.
-        acceleration_file (str): Path for the main acceleration CSV log.
-        displacement_file (str): Path for the main displacement CSV log.
-        general_file (str): Path for the main combined measurements CSV log.
-        enable_performance_monitoring (bool): Flag to enable performance logging.
-        performance_log_file (str): Path for the performance log CSV.
-        enable_lvdt (bool): Flag to enable LVDT sensor processing.
-        enable_accel (bool): Flag to enable accelerometer sensor processing.
-        num_lvdts (int): Number of LVDT sensors configured.
-        num_accelerometers (int): Number of accelerometer sensors configured.
-        sampling_rate_acceleration (float): Target sampling rate for accelerometers (Hz).
-        sampling_rate_lvdt (float): Target sampling rate for LVDTs (Hz).
-        plot_refresh_rate (float): Target refresh rate for live plotting (if used, Hz).
-        time_step_acceleration (float): Calculated time interval between accelerometer samples (s).
-        time_step_lvdt (float): Calculated time interval between LVDT samples (s).
-        time_step_plot_refresh (float): Calculated time interval for plot updates (s).
-        window_duration (int): Duration for analysis windows (e.g., moving averages) in seconds.
-        gravity (float): Standard gravity value (m/s^2).
-        max_accel_jitter (float): Maximum allowable jitter for accelerometer timing (ms).
-        max_lvdt_jitter (float): Maximum allowable jitter for LVDT timing (ms).
-        trigger_acceleration_threshold (float): Threshold for acceleration magnitude to trigger an event (m/s^2).
-        trigger_displacement_threshold (float): Threshold for absolute displacement to trigger an event (mm).
-        detrigger_acceleration_threshold (float): Threshold below which acceleration must fall to potentially end an event.
-        detrigger_displacement_threshold (float): Threshold below which displacement must fall to potentially end an event.
-        pre_trigger_time (float): Duration of data to save before an event trigger (s).
-        post_trigger_time (float): Duration to continue recording after the last trigger condition (s).
-        min_event_duration (float): Minimum total duration for a recording to be saved as an event (s).
-        lvdt_gain (float): Gain setting for the ADS1115 ADC when reading LVDTs.
-        lvdt_scale_factor (float): Voltage conversion factor for LVDT ADC readings (mV/bit).
-        lvdt_slope (float): Default LVDT calibration slope (mm/V).
-        lvdt_intercept (float): Default LVDT calibration intercept (mm).
-        accel_offsets (list): List of dictionaries containing calibration offsets ('x', 'y', 'z')
-                              and 'scaling_factor' for each accelerometer.
-        gpio_pins (list): List of GPIO pin numbers used for status and activity LEDs.
-        operational_mode (str): Description of the operational mode (e.g., "Hardware Mode").
-    """
+    """Configuration class for the monitoring system."""
 
     def __init__(
         self,
@@ -101,9 +59,9 @@ class SystemConfig:
         output_dir=None,
         num_lvdts=2,
         num_accelerometers=2,
-        sampling_rate_acceleration=200.0,
-        sampling_rate_lvdt=5.0,
-        plot_refresh_rate=10.0,
+        sampling_rate_acceleration=200.0,  # Accept any provided value
+        sampling_rate_lvdt=5.0,           # Accept any provided value
+        plot_refresh_rate=10.0,           # Accept any provided value
         gpio_pins=None,
         trigger_acceleration_threshold=None,
         detrigger_acceleration_threshold=None,
@@ -113,39 +71,7 @@ class SystemConfig:
         post_trigger_time=5.0,
         min_event_duration=1.0,
     ):
-        """
-        Initializes the SystemConfig object with provided or default parameters.
-
-        Sets up data storage paths, sensor configurations, sampling rates,
-        event detection parameters, and default hardware settings.
-
-        Args:
-            enable_lvdt (bool): Enable LVDT usage. Defaults to True.
-            enable_accel (bool): Enable accelerometer usage. Defaults to True.
-            output_dir (str, optional): Base directory for output. If None, defaults
-                                        to 'repository/YYYYMMDD'. Defaults to None.
-            num_lvdts (int): Number of LVDT sensors. Defaults to 2.
-            num_accelerometers (int): Number of accelerometer sensors. Defaults to 2.
-            sampling_rate_acceleration (float): Target accelerometer sampling rate (Hz). Defaults to 200.0.
-            sampling_rate_lvdt (float): Target LVDT sampling rate (Hz). Defaults to 5.0.
-            plot_refresh_rate (float): Target plot refresh rate (Hz). Defaults to 10.0.
-            gpio_pins (list, optional): GPIO pins for LEDs [status, activity]. If None,
-                                        defaults to [18, 17]. Defaults to None.
-            trigger_acceleration_threshold (float, optional): Event trigger threshold for acceleration (m/s^2).
-                                                              If None, defaults based on gravity. Defaults to None.
-            detrigger_acceleration_threshold (float, optional): Event detrigger threshold for acceleration (m/s^2).
-                                                                If None, defaults based on trigger threshold. Defaults to None.
-            trigger_displacement_threshold (float, optional): Event trigger threshold for displacement (mm).
-                                                              If None, defaults to 1.0. Defaults to None.
-            detrigger_displacement_threshold (float, optional): Event detrigger threshold for displacement (mm).
-                                                                If None, defaults based on trigger threshold. Defaults to None.
-            pre_trigger_time (float): Duration of pre-event buffer (s). Defaults to 2.0.
-            post_trigger_time (float): Duration to record after last trigger (s). Defaults to 5.0.
-            min_event_duration (float): Minimum duration for a valid event (s). Defaults to 1.0.
-
-        Returns:
-            None
-        """
+        """Initialize system configuration."""
         # Set output directory first to avoid the AttributeError
         self.output_dir = output_dir
         if self.output_dir is None:
@@ -246,28 +172,9 @@ class SystemConfig:
             print(
                 f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {plot_refresh_rate} Hz)"
             )
-        # Add operational mode attribute
-        self.operational_mode = "Hardware Mode" if LED is not None else "Simulation Mode"
 
     def _initialize_output_directory(self, custom_dir=None):
-        """
-        DEPRECATED/Internal: Initializes and creates the output directory structure.
-
-        Note: This logic is now primarily handled within __init__. This method
-        might be redundant or used for specific cases.
-
-        Creates the base directory and a session-specific subdirectory based on the current date.
-
-        Args:
-            custom_dir (str, optional): A custom base directory path. If None, uses 'repository'.
-                                        Defaults to None.
-
-        Returns:
-            str: The path to the created session-specific directory (e.g., 'repository/YYYY-MM-DD').
-
-        Side Effects:
-            - Creates directories on the filesystem if they don't exist.
-        """
+        """Initialize the output directory for saving data."""
         if custom_dir:
             base_folder = custom_dir
         else:
@@ -287,21 +194,10 @@ class SystemConfig:
         return session_path
 
     def initialize_thresholds(self):
-        """
-        Creates a dictionary containing the configured event detection thresholds and timings.
-
-        Returns:
-            dict: A dictionary with keys 'acceleration', 'displacement', 'pre_event_time',
-                  'post_event_time', 'min_event_duration', populated with values from
-                  the config object. Thresholds are set to None if the corresponding sensor
-                  is disabled.
-        """
-        # Include detrigger thresholds
+        """Initialize the thresholds for event detection."""
         thresholds = {
             "acceleration": self.trigger_acceleration_threshold if self.enable_accel else None,
             "displacement": self.trigger_displacement_threshold if self.enable_lvdt else None,
-            "detrigger_acceleration": self.detrigger_acceleration_threshold if self.enable_accel else None,
-            "detrigger_displacement": self.detrigger_displacement_threshold if self.enable_lvdt else None,
             "pre_event_time": self.pre_trigger_time,
             "post_event_time": self.post_trigger_time,
             "min_event_duration": self.min_event_duration,
@@ -309,22 +205,7 @@ class SystemConfig:
         return thresholds
 
     def initialize_leds(self):
-        """
-        Initializes GPIO LEDs for status and activity indication (Raspberry Pi only).
-
-        Uses the `gpiozero` library to create LED objects based on the configured
-        `gpio_pins`. Handles potential exceptions during initialization.
-
-        Returns:
-            tuple: A tuple containing (status_led, activity_led). Each element is
-                   a `gpiozero.LED` object if successful, or None if running in
-                   simulation mode or if initialization fails.
-
-        Side Effects:
-            - Initializes GPIO pins for LED output.
-            - Turns off LEDs initially.
-            - Prints a warning message if initialization fails.
-        """
+        """Initialize LED indicators for Raspberry Pi hardware."""
         if LED is None:
             return None, None
         try:
@@ -340,21 +221,7 @@ class SystemConfig:
             return None, None
 
     def create_ads1115(self):
-        """
-        Initializes and returns an ADS1115 ADC object via I2C (Raspberry Pi only).
-
-        Uses the `adafruit_ads1x15` library to communicate with the ADC chip.
-        Sets the ADC gain based on `self.lvdt_gain`. Handles potential I2C
-        communication errors.
-
-        Returns:
-            ADS.ADS1115 or None: An initialized ADS1115 object if successful,
-                                 otherwise None.
-
-        Side Effects:
-            - Initializes I2C communication.
-            - Prints an error message if initialization fails.
-        """
+        """Create and return an ADS1115 ADC object."""
         try:
             i2c = busio.I2C(board.SCL, board.SDA)
             ads = ADS.ADS1115(i2c)
@@ -365,22 +232,7 @@ class SystemConfig:
             return None
 
     def create_lvdt_channels(self, ads):
-        """
-        Creates AnalogIn channel objects for LVDTs using a provided ADS1115 object.
-
-        Maps the configured number of LVDTs (`self.num_lvdts`) to the physical
-        channels (P0, P1, P2, P3) of the ADS1115 ADC.
-
-        Args:
-            ads: An initialized `ADS.ADS1115` object returned by `create_ads1115`.
-
-        Returns:
-            list or None: A list of `AnalogIn` objects, one for each configured LVDT,
-                          or None if creation fails or `ads` is None.
-
-        Side Effects:
-            - Prints an error message if channel creation fails.
-        """
+        """Create LVDT channels using the provided ADS1115 object."""
         try:
             channels = []
             channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]  # ADS1115 has 4 channels
@@ -395,21 +247,7 @@ class SystemConfig:
             return None
 
     def create_accelerometers(self):
-        """
-        Initializes and returns MPU6050 accelerometer objects via I2C (Raspberry Pi only).
-
-        Uses the `mpu6050-raspberrypi` library. Assumes accelerometers are connected
-        at consecutive I2C addresses starting from 0x68.
-
-        Returns:
-            list or None: A list of initialized `mpu6050` objects, one for each
-                          configured accelerometer (`self.num_accelerometers`),
-                          or None if initialization fails.
-
-        Side Effects:
-            - Initializes I2C communication for each sensor.
-            - Prints an error message if initialization fails.
-        """
+        """Create and return MPU6050 accelerometer objects."""
         try:
             mpu_list = []
             for i in range(self.num_accelerometers):
@@ -421,18 +259,9 @@ class SystemConfig:
             return None
 
 
-# Utility functions (Consider integrating these into the class or removing if redundant)
-
+# Utility functions
 def leds(gpio_pins):
-    """
-    Standalone utility function to initialize LEDs.
-
-    Args:
-        gpio_pins (list): List of two GPIO pin numbers [status, activity].
-
-    Returns:
-        tuple: (status_led, activity_led) objects or (None, None) on failure.
-    """
+    """Initialize LEDs connected to the specified GPIO pins."""
     try:
         return LED(gpio_pins[0]), LED(gpio_pins[1])
     except Exception as e:
@@ -441,12 +270,7 @@ def leds(gpio_pins):
 
 
 def ads1115():
-    """
-    Standalone utility function to initialize the ADS1115 ADC.
-
-    Returns:
-        ADS.ADS1115 object or None on failure.
-    """
+    """Initialize the ADS1115 ADC."""
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS.ADS1115(i2c)
@@ -458,19 +282,7 @@ def ads1115():
 
 
 def thresholds(trigger_acceleration, trigger_displacement, pre_time, enable_accel, enable_lvdt):
-    """
-    Standalone utility function to create a threshold dictionary.
-
-    Args:
-        trigger_acceleration (float): Acceleration trigger threshold.
-        trigger_displacement (float): Displacement trigger threshold.
-        pre_time (float): Pre-trigger time.
-        enable_accel (bool): Whether accelerometers are enabled.
-        enable_lvdt (bool): Whether LVDTs are enabled.
-
-    Returns:
-        dict: Dictionary containing threshold values.
-    """
+    """Initialize thresholds for event detection."""
     return {
         "acceleration": trigger_acceleration if enable_accel else None,
         "displacement": trigger_displacement if enable_lvdt else None,

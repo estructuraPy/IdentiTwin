@@ -1,23 +1,24 @@
 """
-Event Monitoring Module for IdentiTwin.
+Event monitoring module for the IdentiTwin system.
 
-Continuously monitors the incoming sensor data stream for significant events
-based on configured acceleration and/or displacement thresholds. Implements
-a trigger/detrigger mechanism with pre- and post-trigger buffering to capture
-complete event waveforms. Detected events are saved and analyzed.
+This module provides real-time monitoring and detection of structural events based on:
+- Acceleration thresholds
+- Displacement thresholds
+- Event duration analysis
 
 Key Features:
-- Real-time event detection using magnitude/displacement thresholds.
-- Moving average filters for smoothing sensor readings before thresholding.
-- Pre-trigger buffer to capture data leading up to an event.
-- Post-trigger recording duration to capture the event's decay.
-- Minimum event duration filtering to ignore short transients.
-- Thread-based monitoring for non-blocking operation.
-- Integration with `processing_analysis` for saving and analyzing event data.
-- Shared state management via the `state` module.
+- Continuous sensor data monitoring
+- Pre-trigger and post-trigger data buffering
+- Event data persistence and analysis
+- Multi-threaded event processing
+- Moving average filtering for noise reduction
+- Adaptive trigger/detrigger mechanism
 
 Classes:
-    EventMonitor: Manages the event detection logic and data buffering.
+    EventMonitor: Main class for event detection and handling
+
+The module integrates with the data processing and analysis modules for complete
+event lifecycle management from detection to analysis and storage.
 """
 
 import os
@@ -39,57 +40,28 @@ from . import processing_analysis
 
 # event_monitoring.py
 class EventMonitor:
-    """
-    Monitors sensor data for events based on thresholds and manages event recording.
-
-    Processes data from a queue, applies moving averages, checks against trigger
-    and detrigger thresholds, manages data buffering (pre-trigger, event data),
-    and initiates saving and analysis of confirmed events. Runs its monitoring
-    logic in a separate thread.
-
-    Attributes:
-        config: The system configuration object.
-        data_queue (deque): Shared queue from which sensor data is read.
-        thresholds (dict): Dictionary containing trigger/detrigger thresholds and timing parameters.
-        running_ref (callable): A function/lambda returning the system's running state (bool).
-        event_count_ref (list): A mutable list containing the shared event count (e.g., [0]).
-        event_in_progress (bool): Flag indicating if an event is currently being detected/recorded (internal use).
-        event_data_buffer (queue.Queue): Queue to hold completed event data lists before saving (can be used for async saving).
-        in_event_recording (bool): Flag indicating if currently recording an event.
-        current_event_data (list): Buffer storing data for the event currently being recorded.
-        pre_trigger_buffer (deque): Circular buffer storing recent data points before a trigger.
-        last_trigger_time (float): Timestamp of the last trigger condition met.
-        accel_buffer (deque): Buffer for calculating accelerometer moving average.
-        disp_buffer (deque): Buffer for calculating displacement moving average.
-        moving_avg_accel (float): Current moving average of acceleration magnitude.
-        moving_avg_disp (float): Current moving average of displacement.
-        error_count (int): Counter for consecutive errors during detection.
-        max_errors (int): Threshold for consecutive errors before logging a warning.
-    """
+    """Monitors events based on sensor data and saves relevant information."""
 
     def __init__(self, config, data_queue, thresholds, running_ref, event_count_ref):
         """
         Initializes the EventMonitor.
 
-        Sets up internal state, buffers, moving average parameters, and references
-        to shared objects based on the provided arguments. Initializes event-related
-        variables in the shared `state` module.
-
         Args:
             config: The system configuration object.
-            data_queue (deque): The shared deque from which to read sensor data.
-            thresholds (dict): A dictionary containing trigger/detrigger thresholds
-                               ('acceleration', 'displacement', 'detrigger_acceleration',
-                               'detrigger_displacement') and timing parameters
-                               ('pre_event_time', 'post_event_time', 'min_event_duration').
-            running_ref (callable): A function or lambda that returns True if the main
-                                    monitoring system is running, False otherwise.
-            event_count_ref (list): A mutable list (e.g., [0]) used as a reference
-                                    to the global event counter, allowing this class
-                                    to increment it.
+            data_queue: A queue containing sensor data.
+            thresholds: A dictionary of thresholds for event detection.
+            running_ref: A reference to a boolean indicating whether the system is running.
+            event_count_ref: A reference to an integer tracking the number of events.
 
         Returns:
             None
+
+        Assumptions:
+            - The configuration object is properly set up.
+            - The data queue provides sensor data in a consistent format.
+            - Thresholds for acceleration and displacement are provided.
+            - The running_ref is a shared boolean to control the thread.
+            - The event_count_ref is a shared counter for events.
         """
         self.config = config
         self.data_queue = data_queue
@@ -119,22 +91,7 @@ class EventMonitor:
         self.max_errors = 100  # Maximum number of consecutive errors before warning
 
     def detect_event(self, sensor_data):
-        """
-        Processes a single sensor data point to detect or continue recording an event.
-
-        Updates moving averages, checks if current sensor readings exceed trigger
-        thresholds. Manages the state transitions between 'not recording', 'recording',
-        and 'event completion'. Handles pre-trigger buffering and post-trigger timing.
-
-        Args:
-            sensor_data (dict): A dictionary containing the timestamp and sensor readings
-                                for a single time step. Expected format:
-                                {'timestamp': datetime, 'sensor_data': {'accel_data': [...], 'lvdt_data': [...]}}
-
-        Returns:
-            bool: True if the data point was processed successfully, False if an error
-                  occurred or the data was invalid.
-        """
+        """Detect and record event data using trigger/detrigger mechanism."""
         if not sensor_data or "sensor_data" not in sensor_data:
             return False
         
@@ -187,31 +144,7 @@ class EventMonitor:
             return False
 
     def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement):
-        """
-        Handles the logic when an event trigger condition is met.
-
-        Sets the `last_trigger_time`. If not already recording, it transitions
-        to the recording state, copies the pre-trigger buffer to the current event data,
-        updates the shared state, and prints a detection message. Appends the current
-        triggering data point to the event buffer.
-
-        Args:
-            sensor_data (dict): The sensor data point that caused the trigger.
-            current_time (float): The timestamp (`time.time()`) of the trigger.
-            magnitude (float): The acceleration magnitude at the trigger time.
-            displacement (float): The displacement value at the trigger time.
-
-        Returns:
-            bool: True if handled successfully, False otherwise.
-
-        Side Effects:
-            - Updates `self.last_trigger_time`.
-            - May set `self.in_event_recording` to True.
-            - May update 'is_event_recording' and 'last_trigger_time' in the `state` module.
-            - May copy data from `self.pre_trigger_buffer` to `self.current_event_data`.
-            - Appends `sensor_data` to `self.current_event_data`.
-            - May print a message to the console.
-        """
+        """Handle event trigger logic"""
         try:
             self.last_trigger_time = current_time
             
@@ -230,31 +163,7 @@ class EventMonitor:
             return False
 
     def _handle_event_recording(self, sensor_data, current_time):
-        """
-        Handles logic while an event is actively being recorded.
-
-        Appends the current sensor data to the buffer. Checks if the post-trigger
-        duration has elapsed since the last trigger condition. If so, checks if the
-        minimum event duration is met. If both conditions are true, it finalizes
-        the event by putting the data into the `event_data_buffer`, incrementing
-        the event count, initiating the save process, and resetting the recording state.
-
-        Args:
-            sensor_data (dict): The current sensor data point during recording.
-            current_time (float): The timestamp (`time.time()`) of this data point.
-
-        Returns:
-            bool: True if handled successfully, False otherwise.
-
-        Side Effects:
-            - Appends `sensor_data` to `self.current_event_data`.
-            - May transition `self.in_event_recording` to False.
-            - May clear `self.current_event_data` and `self.pre_trigger_buffer`.
-            - May update 'is_event_recording' in the `state` module.
-            - May call `self._save_event_data`.
-            - May increment `self.event_count_ref`.
-            - May print messages to the console.
-        """
+        """Handle ongoing event recording and check for completion"""
         try:
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
@@ -286,22 +195,7 @@ class EventMonitor:
             return False
 
     def event_monitoring_thread(self):
-        """
-        Main function for the event monitoring background thread.
-
-        Continuously reads data from the `data_queue`, passes it to `detect_event`
-        for processing, and handles potential exceptions. Runs until `self.running_ref()`
-        returns False. Calls cleanup logic upon exiting the loop.
-
-        Returns:
-            None
-
-        Side Effects:
-            - Consumes data from `self.data_queue`.
-            - Calls `detect_event` repeatedly.
-            - Calls `_cleanup_on_exit` before terminating.
-            - Logs errors if exceptions occur.
-        """
+        """Thread function for monitoring events."""
         while self.running_ref:
             try:
                 if not self.data_queue:
@@ -319,19 +213,7 @@ class EventMonitor:
         self._cleanup_on_exit()
 
     def _cleanup_on_exit(self):
-        """
-        Performs cleanup actions when the monitoring thread is stopping.
-
-        Specifically, checks if an event was in progress when the thread stopped
-        and finalizes/saves it if necessary.
-
-        Returns:
-            None
-
-        Side Effects:
-            - May call `self._finalize_event`.
-            - Logs errors if cleanup fails.
-        """
+        """Clean up resources when thread exits"""
         try:
             if self.in_event_recording and self.current_event_data:
                 self._finalize_event()
@@ -339,27 +221,7 @@ class EventMonitor:
             logging.error(f"Error during cleanup: {e}")
 
     def _save_event_data(self, event_data, start_time):
-        """
-        Processes and saves the data for a completed event.
-
-        Filters out duplicate timestamps, calculates expected relative timestamps,
-        and calls `processing_analysis.save_event_data` to handle the actual
-        saving of NPZ data, CSV files, analysis, and plotting. Updates the shared
-        event count in the `state` module upon successful saving.
-
-        Args:
-            event_data (list): The list of sensor data dictionaries for the completed event.
-            start_time (datetime): The timestamp of the first data point in the event.
-
-        Returns:
-            bool: True if the event was saved and processed successfully, False otherwise.
-
-        Side Effects:
-            - Calls `processing_analysis.save_event_data`.
-            - May update 'event_count' in the `state` module.
-            - Prints success or error messages.
-            - Logs errors if exceptions occur.
-        """
+        """Save event data to CSV file and generate plots."""
         try:
             # Initialize tracking variables
             seen_timestamps = set()
@@ -405,24 +267,7 @@ class EventMonitor:
             return False
 
     def _generate_plots(self, event_data, event_dir):
-        """
-        Generates time-series plots for acceleration magnitude and displacement for an event.
-
-        Extracts relevant data, calculates relative timestamps, and uses Matplotlib's
-        object-oriented API (`Figure`, `FigureCanvasAgg`) to create and save plots
-        without relying on the global `pyplot` state, making it more suitable for threading.
-
-        Args:
-            event_data (list): The list of sensor data dictionaries for the event.
-            event_dir (str): The directory where the plot images should be saved.
-
-        Returns:
-            None
-
-        Side Effects:
-            - Creates 'acceleration_plot.png' and 'displacement_plot.png' in `event_dir`.
-            - Logs warnings or errors if plotting fails or data is missing.
-        """
+        """Generates plots for acceleration and displacement using thread-safe approach."""
         timestamps = []
         accel_magnitudes = []
         displacements = []
@@ -501,24 +346,7 @@ class EventMonitor:
             traceback.print_exc()
 
     def _finalize_event(self):
-        """
-        Helper method to ensure an event is properly saved and state is reset.
-
-        Called during cleanup or when an event naturally concludes. Calls
-        `_save_event_data` and increments the event count if saving is successful.
-        Resets all event-related state variables (`in_event_recording`, buffers, etc.)
-        and updates the shared 'is_event_recording' state.
-
-        Returns:
-            None
-
-        Side Effects:
-            - Calls `_save_event_data`.
-            - May increment `self.event_count_ref` and update 'event_count' state.
-            - Resets internal event state flags and buffers.
-            - Updates 'is_event_recording' state.
-            - Prints messages or errors.
-        """
+        """Helper method to finalize and save event data."""
         try:
             event_time = self.current_event_data[0]["timestamp"]
             if self._save_event_data(self.current_event_data, event_time):
@@ -538,18 +366,7 @@ class EventMonitor:
         state.set_event_variable("is_event_recording", False)
 
 def print_event_banner():
-    """
-    Prints a simple banner to the console indicating an event is starting.
-
-    Includes a short pause.
-
-    Returns:
-        None
-
-    Side Effects:
-        - Prints text to standard output.
-        - Pauses execution for 2 seconds.
-    """
+    """Print a  banner when the event starts"""
     banner = """
 ===============================================================================
     Event is starting, please wait...
