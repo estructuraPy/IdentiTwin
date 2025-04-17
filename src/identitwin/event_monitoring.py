@@ -117,12 +117,8 @@ class EventMonitor:
                     self.accel_buffer.append(magnitude)
                     self.moving_avg_accel = np.mean(self.accel_buffer)
 
-            if lvdt_data and len(lvdt_data) >= 2:  # Check we have at least 2 LVDTs
-                # Get displacement from both LVDTs
-                disp1 = abs(lvdt_data[0].get("displacement", 0))
-                disp2 = abs(lvdt_data[1].get("displacement", 0))
-                # Use maximum displacement between both sensors
-                instantaneous_disp = max(disp1, disp2)
+            if lvdt_data and len(lvdt_data) > 0:
+                instantaneous_disp = abs(lvdt_data[0].get("displacement", 0))
                 self.disp_buffer.append(instantaneous_disp)
                 self.moving_avg_disp = np.mean(self.disp_buffer)
 
