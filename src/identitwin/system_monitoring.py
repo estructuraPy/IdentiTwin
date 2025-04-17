@@ -35,6 +35,7 @@ from collections import deque
 from datetime import datetime
 import logging
 import queue
+import matplotlib.pyplot as plt  # Add this import for cleanup method
 
 from . import state
 from . import processing_data, processing_analysis
@@ -109,17 +110,28 @@ class MonitoringSystem:
             - The configuration object contains the necessary information to initialize sensors.
         """
         try:
-            # Initialize LEDs with error handling
+            # Initialize LEDs
+            self.status_led = None
+            self.activity_led = None
+            
             try:
-                self.status_led, self.activity_led = self.config.initialize_leds()
-                if self.status_led:
-                    self.status_led.off()  # Ensure LED starts off
-                if self.activity_led:
-                    self.activity_led.off()  # Ensure LED starts off
+                # Only attempt to initialize LEDs if the hardware module is available
+                if 'LED' in globals() and LED is not None:
+                    led_pair = self.config.initialize_leds()
+                    if led_pair and len(led_pair) == 2:
+                        self.status_led, self.activity_led = led_pair
+                        # Test LEDs with a quick flash pattern to verify they work
+                        if self.status_led:
+                            self.status_led.blink(on_time=0.1, off_time=0.1, n=2, background=True)
+                        if self.activity_led:
+                            self.activity_led.blink(on_time=0.1, off_time=0.1, n=2, background=True)
+                        print("LED indicators initialized and tested successfully")
+                    else:
+                        print("LED initialization returned invalid data")
+                else:
+                    print("LED hardware support not available")
             except Exception as e:
-                logging.warning(f"LED initialization failed: {e}")
-                self.status_led = None
-                self.activity_led = None
+                print(f"LED initialization failed, continuing without indicators: {e}")
 
             # Initialize ADS1115 ADC for LVDTs
             self.ads = self.config.create_ads1115()
@@ -288,8 +300,11 @@ class MonitoringSystem:
             None
         """
         self.stop_monitoring()
-        # Use plt.close directly instead of non-existent visualization.close_all_plots
-        plt.close("all")
+        try:
+            # Use plt.close in try/except block for robustness
+            plt.close("all")
+        except Exception as e:
+            print(f"Note: Could not close matplotlib plots: {e}")
         print("Resources cleaned up.")
 
     def wait_for_completion(self):

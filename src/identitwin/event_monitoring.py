@@ -109,32 +109,54 @@ class EventMonitor:
             # Process sensor data safely
             magnitude = 0
             instantaneous_disp = 0
+            disp_values = []  # Track all displacement values
 
             if accel_data and len(accel_data) > 0:
-                accel = accel_data[0]
-                if all(k in accel for k in ['x', 'y', 'z']):
-                    magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
+                # Process all available accelerometers and use the maximum magnitude
+                accel_magnitudes = []
+                
+                for accel in accel_data:
+                    if all(k in accel for k in ['x', 'y', 'z']):
+                        accel_mag = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
+                        accel_magnitudes.append(accel_mag)
+                
+                if accel_magnitudes:
+                    magnitude = max(accel_magnitudes)
                     self.accel_buffer.append(magnitude)
                     self.moving_avg_accel = np.mean(self.accel_buffer)
 
-            if lvdt_data and len(lvdt_data) >= 2:  # Check we have at least 2 LVDTs
-                # Get displacement from both LVDTs
-                disp1 = abs(lvdt_data[0].get("displacement", 0))
-                disp2 = abs(lvdt_data[1].get("displacement", 0))
-                # Use maximum displacement between both sensors
-                instantaneous_disp = max(disp1, disp2)
-                self.disp_buffer.append(instantaneous_disp)
-                self.moving_avg_disp = np.mean(self.disp_buffer)
+            if lvdt_data and len(lvdt_data) >= 1:  # Process all available LVDTs
+                # Get displacement from all available LVDTs
+                for lvdt in lvdt_data:
+                    disp = abs(lvdt.get("displacement", 0))
+                    disp_values.append(disp)
+                
+                if disp_values:
+                    instantaneous_disp = max(disp_values)  # Use maximum displacement
+                    self.disp_buffer.append(instantaneous_disp)
+                    self.moving_avg_disp = np.mean(self.disp_buffer)
 
-            # Event detection logic
+            # Event detection logic with improved robustness
             trigger_accel = self.thresholds.get("acceleration", 0.981)
             trigger_disp = self.thresholds.get("displacement", 2.0)
             
+            # Use both criteria for more reliable detection
             accel_trigger = magnitude > trigger_accel
             lvdt_trigger = instantaneous_disp > trigger_disp
 
+            # Log high values even if not triggering yet (for diagnostics)
+            if magnitude > (trigger_accel * 0.8) or instantaneous_disp > (trigger_disp * 0.8):
+                logging.debug(f"Near trigger: Accel={magnitude:.3f}/{trigger_accel:.3f}, Disp={instantaneous_disp:.3f}/{trigger_disp:.3f}")
+
             if accel_trigger or lvdt_trigger:
-                return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp)
+                # Record which sensor(s) triggered the event
+                trigger_source = []
+                if accel_trigger:
+                    trigger_source.append(f"accelerometer ({magnitude:.3f}>{trigger_accel:.3f})")
+                if lvdt_trigger:
+                    trigger_source.append(f"displacement ({instantaneous_disp:.3f}>{trigger_disp:.3f})")
+                
+                return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp, trigger_source)
             elif self.in_event_recording:
                 return self._handle_event_recording(sensor_data, current_time)
                 
@@ -147,16 +169,18 @@ class EventMonitor:
                 self.error_count = 0
             return False
 
-    def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement):
-        """Handle event trigger logic"""
+    def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement, trigger_source=None):
+        """Handle event trigger logic with improved informational output"""
         try:
             self.last_trigger_time = current_time
             
             if not self.in_event_recording:
-                print(f"\n*** NEW EVENT DETECTED at {sensor_data['timestamp']} ***")
+                trigger_info = f"triggered by {', '.join(trigger_source)}" if trigger_source else ""
+                print(f"\n*** NEW EVENT DETECTED at {sensor_data['timestamp']} {trigger_info} ***")
                 self.in_event_recording = True
                 state.set_event_variable("is_event_recording", True)
                 state.set_event_variable("last_trigger_time", current_time)
+                state.set_event_variable("trigger_source", trigger_source)
                 self.current_event_data = list(self.pre_trigger_buffer)
             
             self.current_event_data.append(sensor_data)
