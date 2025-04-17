@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.2"
+version = "0.0.10"
 description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
@@ -13,14 +13,7 @@ authors = [
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "numpy>=1.21.0",
-    "matplotlib>=3.5.0",
-    "gpiozero>=1.6.0",
-    "adafruit-circuitpython-ads1x15>=2.2.0",
-    "mpu6050-raspberrypi>=1.2.0",
-    "RPi.GPIO>=0.7.0"
-]
+dependencies = ["-r requirements.txt"]
 
 [tool.setuptools]
 packages = ["identitwin"]
