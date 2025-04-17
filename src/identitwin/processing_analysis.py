@@ -1,24 +1,18 @@
 """
-Data analysis module for the Identitwin monitoring system.
+Data Analysis Module for IdentiTwin.
 
-This module provides comprehensive analysis of monitored data including:
-- FFT (Fast Fourier Transform) analysis
-- Statistical calculations (RMS, peak-to-peak, crest factor)
-- Event characterization
-- Data visualization
-- Report generation
+Provides functions for analyzing sensor data recorded during monitoring sessions,
+especially for events. Includes FFT calculation, statistical analysis (RMS, peak),
+peak frequency detection, data visualization (plotting), and report generation
+for individual events.
 
 Key Features:
-- Frequency domain analysis
-- Time domain statistical analysis
-- Automated plot generation
-- Peak detection algorithms
-- Event data summarization
-- Performance metric calculation
-- Thread-safe plotting utilities
-
-The module serves as the analytical engine for understanding and
-characterizing structural events and system behavior.
+- Fast Fourier Transform (FFT) calculation with Hanning windowing.
+- Calculation of time-domain statistics: RMS, Peak-to-Peak, Crest Factor.
+- Identification of dominant frequencies in FFT results.
+- Generation of time-series and FFT plots for accelerometer and LVDT data.
+- Saving of processed event data (NumPy arrays) and analysis results (reports, plots).
+- Functions for checking and potentially correcting timing drift.
 """
 
 import os
@@ -30,14 +24,23 @@ from .processing_data import extract_data_from_event  # Add this import
 
 def calculate_fft(data, sampling_rate):
     """
-    Calculate FFT for accelerometer data.
-    
+    Calculates the Fast Fourier Transform (FFT) for 3-axis accelerometer data.
+
+    Applies a Hanning window, performs FFT using NumPy's rfft (real FFT),
+    and scales the magnitude appropriately. Zero-pads data to the next power of 2
+    for efficiency.
+
     Args:
-        data: Dictionary containing x, y, z acceleration data arrays
-        sampling_rate: Sampling rate in Hz
-    
+        data (dict): A dictionary containing NumPy arrays for 'x', 'y', and 'z'
+                     axis acceleration data.
+        sampling_rate (float): The sampling rate of the acceleration data in Hz.
+
     Returns:
-        Tuple (frequencies, fft_x, fft_y, fft_z)
+        tuple: A tuple containing:
+            - freqs (np.ndarray): Array of frequencies corresponding to the FFT bins.
+            - fft_x (np.ndarray): Magnitude of the FFT for the X-axis.
+            - fft_y (np.ndarray): Magnitude of the FFT for the Y-axis.
+            - fft_z (np.ndarray): Magnitude of the FFT for the Z-axis.
     """
     # Find the next power of 2 length
     n = max(len(data['x']), len(data['y']), len(data['z']))
@@ -65,22 +68,77 @@ def calculate_fft(data, sampling_rate):
     return freqs, fft_results['x'], fft_results['y'], fft_results['z']
 
 def calculate_rms(data):
-    """Calculate RMS value of data."""
+    """
+    Calculates the Root Mean Square (RMS) value of a data array.
+
+    Args:
+        data (np.ndarray): A NumPy array of numerical data.
+
+    Returns:
+        float: The RMS value of the input data.
+    """
     return np.sqrt(np.mean(np.square(data)))
 
 def calculate_peak_to_peak(data):
-    """Calculate peak-to-peak value of data."""
+    """
+    Calculates the peak-to-peak amplitude of a data array.
+
+    Args:
+        data (np.ndarray): A NumPy array of numerical data.
+
+    Returns:
+        float: The difference between the maximum and minimum values in the data.
+    """
     return np.max(data) - np.min(data)
 
 def calculate_crest_factor(data):
-    """Calculate crest factor (peak/RMS) of data."""
+    """
+    Calculates the crest factor (Peak Amplitude / RMS) of a data array.
+
+    Args:
+        data (np.ndarray): A NumPy array of numerical data.
+
+    Returns:
+        float: The crest factor. Returns 0 if the RMS value is zero to avoid
+               division by zero.
+    """
     rms = calculate_rms(data)
     if rms > 0:
         return np.max(np.abs(data)) / rms
     return 0
 
 def save_event_data(event_data, start_time, config, event_folder=None, displacement_file=None, acceleration_file=None):
-    """Save event data to files and generate analysis."""
+    """
+    Orchestrates the saving and analysis of data for a detected event.
+
+    Creates an event-specific folder (if not provided), extracts numerical data
+    into NumPy arrays, saves the arrays to a .npz file, creates sensor-specific
+    CSV files (if not provided), and triggers the generation of analysis reports
+    and plots.
+
+    Args:
+        event_data (list): The raw list of sensor data dictionaries for the event.
+        start_time (datetime): The timestamp of the start of the event.
+        config: The system configuration object.
+        event_folder (str, optional): Path to the specific folder for this event.
+                                      If None, a folder is created based on the timestamp.
+                                      Defaults to None.
+        displacement_file (str, optional): Path to an existing displacement CSV file.
+                                           If None, one will be created. Defaults to None.
+        acceleration_file (str, optional): Path to an existing acceleration CSV file.
+                                           If None, one will be created. Defaults to None.
+
+    Returns:
+        str or None: The path to the generated event report file if successful,
+                     otherwise None.
+
+    Side Effects:
+        - Creates an event folder if `event_folder` is None.
+        - Creates/overwrites 'data.npz' file in the event folder.
+        - May create 'displacements.csv' and 'acceleration.csv' files.
+        - Calls `generate_event_analysis` which creates report and plot files.
+        - Prints status and error messages.
+    """
     try:
         # Create event folder if not provided
         if event_folder is None:
@@ -135,7 +193,32 @@ def save_event_data(event_data, start_time, config, event_folder=None, displacem
         return None
 
 def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_file=None, lvdt_file=None):
-    """Generate comprehensive event analysis with reports and visualizations."""
+    """
+    Performs analysis on extracted event data (NumPy arrays) and generates outputs.
+
+    Calculates statistics (max values), performs FFT analysis on accelerometer data,
+    finds dominant frequencies, generates time-series and FFT plots for all sensors,
+    and writes a summary text report.
+
+    Args:
+        event_folder (str): Path to the directory for storing analysis outputs.
+        np_data (dict): Dictionary of NumPy arrays containing the event's sensor data
+                        (output from `extract_data_from_event`).
+        timestamp_str (str): Timestamp string for naming output files (e.g., 'YYYYMMDD_HHMMSS').
+        config: The system configuration object.
+        accel_file (str, optional): Path to the acceleration CSV file for reference in the report.
+                                    Defaults to None.
+        lvdt_file (str, optional): Path to the displacement CSV file for reference in the report.
+                                   Defaults to None.
+
+    Returns:
+        bool: True if analysis was generated successfully, False otherwise.
+
+    Side Effects:
+        - Creates plot image files (e.g., 'analysis_YYYYMMDD_HHMMSS_accel1.png') in `event_folder`.
+        - Creates a text report file (e.g., 'report_YYYYMMDD_HHMMSS.txt') in `event_folder`.
+        - Prints status and error messages.
+    """
     try:
         # Calculate statistics for accelerometer data
         if config.enable_accel and 'accel1_x' in np_data:
@@ -201,7 +284,21 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
         return False
 
 def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
-    """Find the n most dominant frequencies in FFT data."""
+    """
+    Identifies the frequencies corresponding to the highest peaks in FFT magnitude data.
+
+    Finds local maxima in the FFT magnitude array (excluding very low frequencies < 0.5 Hz)
+    and returns the frequencies of the `n_peaks` highest amplitude peaks.
+
+    Args:
+        fft_data (np.ndarray): Array of FFT magnitude values.
+        freqs (np.ndarray): Array of frequencies corresponding to `fft_data`.
+        n_peaks (int): The number of dominant frequencies to return. Defaults to 3.
+
+    Returns:
+        list: A list of the `n_peaks` most dominant frequencies (float values in Hz),
+              sorted by amplitude in descending order.
+    """
     peaks = []
     for i in range(1, len(fft_data)-1):
         if (fft_data[i] > fft_data[i-1] and 
@@ -214,7 +311,33 @@ def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
     return [freq for _, freq in peaks[:n_peaks]]
 
 def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, filename, config):
-    """Create time series and FFT analysis plots for all sensors."""
+    """
+    Generates and saves analysis plots for event data (time series and FFT).
+
+    Creates separate plots for each accelerometer (time series and FFT) and a
+    combined plot for all LVDTs (time series only). Saves plots as PNG files.
+    Uses Matplotlib's object-oriented API for better control.
+
+    Args:
+        np_data (dict): Dictionary of NumPy arrays containing the event's sensor data.
+        freqs (np.ndarray): Frequency array for the primary FFT calculation (used if needed,
+                            but FFT is recalculated per accelerometer).
+        fft_x (np.ndarray): FFT magnitude for X-axis (primary calculation, potentially unused).
+        fft_y (np.ndarray): FFT magnitude for Y-axis (primary calculation, potentially unused).
+        fft_z (np.ndarray): FFT magnitude for Z-axis (primary calculation, potentially unused).
+        timestamp_str (str): Timestamp string for titles and filenames.
+        filename (str): Base path and filename for saving plots (e.g., 'event_folder/analysis_ts').
+                        Sensor-specific suffixes will be added.
+        config: The system configuration object.
+
+    Returns:
+        bool: True if plots were generated successfully, False otherwise.
+
+    Side Effects:
+        - Creates multiple PNG plot files (e.g., '..._accel1.png', '..._lvdt_all.png').
+        - Prints status and error messages.
+        - Closes Matplotlib figures to free memory.
+    """
     try:
         # Get base filename without extension
         base_path = os.path.splitext(filename)[0]
@@ -322,7 +445,38 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
 def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z, max_mag,
                       freqs_x, freqs_y, freqs_z, accel_file, lvdt_file, plot_file, 
                       lvdt_data=None, config=None):
-    """Write detailed event report to file."""
+    """
+    Writes a detailed text report summarizing the analysis of an event.
+
+    Includes event time, duration, peak acceleration values (X, Y, Z, magnitude),
+    dominant frequencies for each accelerometer axis, peak displacement for each LVDT
+    (if available), and references to related data/plot files.
+
+    Args:
+        report_file (str): Full path to the report file to be created.
+        timestamp_str (str): Timestamp string for the event.
+        duration (float): Duration of the event in seconds.
+        max_x (float): Peak absolute acceleration on the X-axis.
+        max_y (float): Peak absolute acceleration on the Y-axis.
+        max_z (float): Peak absolute acceleration on the Z-axis.
+        max_mag (float): Peak resultant acceleration magnitude.
+        freqs_x (list): List of dominant frequencies for the X-axis.
+        freqs_y (list): List of dominant frequencies for the Y-axis.
+        freqs_z (list): List of dominant frequencies for the Z-axis.
+        accel_file (str): Path to the associated acceleration CSV file.
+        lvdt_file (str): Path to the associated displacement CSV file.
+        plot_file (str): Base path to the associated analysis plot files.
+        lvdt_data (dict, optional): Dictionary containing LVDT data arrays (e.g., 'lvdt1_displacement').
+                                    Required if LVDT results are to be included. Defaults to None.
+        config (SystemConfig, optional): System configuration object. Required to check if sensors
+                                         are enabled. Defaults to None.
+
+    Returns:
+        None
+
+    Side Effects:
+        - Creates or overwrites the specified `report_file`.
+    """
     with open(report_file, 'w') as f:
         f.write(f"EVENT ANALYSIS REPORT\n")
         f.write(f"===================\n\n")
@@ -359,7 +513,26 @@ def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z
         f.write(f"  - {os.path.basename(plot_file)}\n")
 
 def generate_fft_plot(np_data, fs, filename, config):
-    """Generate FFT plot for accelerometer data."""
+    """
+    Generates and saves an FFT plot comparing multiple accelerometers.
+
+    Calculates FFT for each enabled accelerometer and plots their X, Y, and Z
+    frequency responses on separate subplots within a single figure.
+
+    Args:
+        np_data (dict): Dictionary of NumPy arrays containing event sensor data.
+        fs (float): The sampling frequency (rate) in Hz.
+        filename (str): The full path to save the output PNG plot file.
+        config: The system configuration object.
+
+    Returns:
+        bool: True if the plot was generated successfully, False otherwise.
+
+    Side Effects:
+        - Creates a PNG plot file at the specified `filename`.
+        - Prints status or error messages.
+        - Closes the Matplotlib figure.
+    """
     try:
         fig, axes = plt.subplots(3, 1, figsize=(10, 12))
         for accel_idx in range(1, config.num_accelerometers + 1):
@@ -386,7 +559,19 @@ def generate_fft_plot(np_data, fs, filename, config):
         return False
 
 def find_peaks(data, threshold=0.0):
-    """Find peaks in FFT data that exceed the threshold."""
+    """
+    Finds indices of peaks (local maxima) in a 1D array above a threshold.
+
+    A peak is defined as a point higher than its immediate neighbors.
+
+    Args:
+        data (np.ndarray): A 1D NumPy array.
+        threshold (float): Minimum value for a point to be considered a peak.
+                           Defaults to 0.0.
+
+    Returns:
+        list: A list of indices where peaks occur.
+    """
     peaks = []
     if len(data) < 3:
         return peaks
@@ -397,17 +582,25 @@ def find_peaks(data, threshold=0.0):
 
 def check_timing_drift(elapsed_time, expected_samples, actual_samples, sampling_rate, max_drift_percent=1.0):
     """
-    Check if there is significant timing drift in data acquisition.
-    
+    Checks for significant timing drift based on expected vs. actual samples.
+
+    Compares the time elapsed calculated from the number of samples and sampling rate
+    against the actual measured elapsed time. Determines if the drift exceeds a
+    specified percentage.
+
     Args:
-        elapsed_time: Total elapsed time in seconds
-        expected_samples: Number of samples expected based on sampling rate
-        actual_samples: Actual number of samples collected
-        sampling_rate: Sampling rate in Hz
-        max_drift_percent: Maximum allowed drift percentage (default 1%)
-        
+        elapsed_time (float): The actual measured time duration in seconds.
+        expected_samples (int): The number of samples expected for the `elapsed_time`
+                                based on the `sampling_rate`. (Note: This seems unused,
+                                the calculation uses `actual_samples`).
+        actual_samples (int): The actual number of samples collected.
+        sampling_rate (float): The target sampling rate in Hz.
+        max_drift_percent (float): The maximum allowable drift percentage. Defaults to 1.0.
+
     Returns:
-        tuple: (needs_reset, drift_percent)
+        tuple: A tuple containing:
+            - needs_reset (bool): True if the calculated drift exceeds `max_drift_percent`.
+            - drift_percent (float): The calculated drift percentage.
     """
     expected_time = actual_samples / sampling_rate
     drift_time = abs(elapsed_time - expected_time)
@@ -420,11 +613,25 @@ def check_timing_drift(elapsed_time, expected_samples, actual_samples, sampling_
 
 def reset_acquisition_timers(np_data, config):
     """
-    Reset acquisition timers and adjust timestamps to fix drift.
-    
+    Adjusts timestamps within event data if significant drift is detected.
+
+    Checks for timing drift in both accelerometer and LVDT data streams (if enabled)
+    using `check_timing_drift`. If drift exceeds the threshold, it recalculates
+    evenly spaced timestamps based on the first and last recorded timestamps and
+    the number of samples, storing them under new keys ('accel_timestamps',
+    'lvdt_timestamps').
+
     Args:
-        np_data: Dictionary containing acquisition data
-        config: System configuration object
+        np_data (dict): Dictionary of NumPy arrays containing event data, including 'timestamps'.
+        config: The system configuration object.
+
+    Returns:
+        None
+
+    Side Effects:
+        - May add 'accel_timestamps' and/or 'lvdt_timestamps' keys to the `np_data` dictionary
+          if drift is detected and corrected.
+        - Prints warning messages if timers are reset.
     """
     if 'timestamps' in np_data:
         # Calcular tiempo transcurrido real

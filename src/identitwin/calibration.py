@@ -1,15 +1,18 @@
 """
-Calibration module for sensors in the IdentiTwin monitoring system.
+Sensor Calibration Module for IdentiTwin.
 
-This module provides functionality for calibrating and initializing various sensors:
-- LVDT (Linear Variable Differential Transformer) displacement sensors
-- Accelerometers (MPU6050)
+Provides functions to perform calibration routines for LVDT and accelerometer
+sensors. This typically involves determining zero-point offsets (intercepts) for
+LVDTs and bias offsets and scaling factors for accelerometers. Calibration data
+can be saved to a log file.
 
 Key Features:
-- Automatic zero-point detection for LVDTs
-- Multiple sensor support with individual calibration parameters
-- Calibration data logging with timestamps
-- Error handling and validation
+- LVDT zeroing based on current voltage reading and known slope.
+- Accelerometer calibration by averaging readings over time to find biases
+  relative to gravity and calculate a scaling factor.
+- Support for calibrating multiple sensors of each type.
+- Saving of calibration parameters (slopes, intercepts, offsets, scaling factors)
+  to a persistent log file with timestamps.
 """
 
 import time
@@ -20,19 +23,29 @@ import numpy as np
 
 def initialize_lvdt(channels, slopes=None, config=None):
     """
-    Initializes LVDT systems with calibration parameters.
+    Initializes and calibrates multiple LVDT sensors by determining their zero intercept.
+
+    Iterates through the provided LVDT channels, performs zeroing calibration
+    using `zeroing_lvdt` for each, and optionally saves the results using the
+    provided config object.
 
     Args:
-        channels: List of LVDT channel objects with a 'voltage' attribute.
-        slopes: List of slopes (mm/V) for each LVDT. Defaults to 19.86 mm/V if not provided.
-        config: System configuration object for saving calibration data.
+        channels (list): A list of LVDT channel objects, each expected to have a
+                         `.voltage` attribute or method returning the current voltage.
+        slopes (list, optional): A list of calibration slopes (mm/V) corresponding
+                                 to each channel. If None, a default slope (19.86)
+                                 is used for all channels. Defaults to None.
+        config (SystemConfig, optional): The system configuration object. If provided,
+                                         calibration data will be saved via `_save_calibration_data`.
+                                         Defaults to None.
 
     Returns:
-        List of dictionaries, each containing 'lvdt_slope' and 'lvdt_intercept'.
+        list: A list of dictionaries. Each dictionary contains the calibration
+              parameters ('lvdt_slope', 'lvdt_intercept') for a corresponding LVDT.
 
-    Assumptions:
-        - Each channel object in 'channels' has a 'voltage' attribute representing the current voltage reading.
-        - LVDT slopes are provided in mm/V, and the intercept is calculated in mm.
+    Raises:
+        ValueError: If `channels` input is invalid (e.g., not a list).
+        Exception: Propagates exceptions occurring during individual LVDT calibration.
     """
     if not channels or not isinstance(channels, list):
         raise ValueError("Invalid channels input.")
@@ -57,18 +70,23 @@ def initialize_lvdt(channels, slopes=None, config=None):
 
 def zeroing_lvdt(channel, slope, label="LVDT"):
     """
-    Calibrates an LVDT to adjust for zero displacement.
+    Performs zero-point calibration for a single LVDT sensor.
+
+    Reads the current voltage from the channel and calculates the intercept required
+    to make the current reading correspond to zero displacement, based on the provided slope.
 
     Args:
-        channel: Channel object representing the LVDT.
-        slope: Slope of the LVDT (mm/V).
-        label: Label for the LVDT (e.g., "LVDT-1").
+        channel: An LVDT channel object with a `.voltage` attribute/method.
+        slope (float): The calibration slope of the LVDT sensor in mm/V.
+        label (str): A descriptive label for the LVDT used in print messages.
+                     Defaults to "LVDT".
 
     Returns:
-        Dictionary containing 'lvdt_slope' and 'lvdt_intercept'.
+        dict: A dictionary containing the calculated 'lvdt_slope' (passed-through)
+              and 'lvdt_intercept' (calculated).
 
     Assumptions:
-        - The 'channel' object has a 'voltage' attribute.
+        - The LVDT is physically at its zero displacement position when this function is called.
     """
     voltage = channel.voltage
     intercept = -slope * voltage
@@ -83,18 +101,30 @@ def zeroing_lvdt(channel, slope, label="LVDT"):
 
 def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     """
-    Calibrates multiple accelerometers to determine bias offsets and scaling factors.
+    Calibrates multiple MPU6050 accelerometers to determine bias offsets and scaling factors.
+
+    For each accelerometer, collects data for a specified duration, calculates the
+    average readings for X, Y, and Z axes. Assumes the sensor is stationary and
+    calculates bias offsets (negated averages) and a scaling factor to make the
+    magnitude of the average readings equal to standard gravity (GRAVITY).
 
     Args:
-        mpu_list: List of MPU objects with a 'get_accel_data()' method.
-        calibration_time: Duration (seconds) to collect samples for calibration. Defaults to 2.0 seconds.
-        config: System configuration object for saving calibration data.
+        mpu_list (list): A list of MPU6050 sensor objects, each expected to have a
+                         `get_accel_data()` method returning {'x': ..., 'y': ..., 'z': ...}.
+        calibration_time (float): The duration in seconds to collect data for averaging.
+                                  Defaults to 2.0.
+        config (SystemConfig, optional): The system configuration object. If provided,
+                                         calibration data will be saved. Defaults to None.
 
     Returns:
-        List of dictionaries, each containing 'x', 'y', 'z' (bias offsets), and 'scaling_factor'.
+        list or None: A list of dictionaries, each containing the calibration offsets
+                      ('x', 'y', 'z') and 'scaling_factor' for a corresponding
+                      accelerometer. Returns None if `mpu_list` is empty. Returns default
+                      offsets/scaling (0.0/1.0) for sensors where reading fails.
 
     Assumptions:
-        - Each MPU object in 'mpu_list' has a 'get_accel_data()' method returning a dictionary with 'x', 'y', 'z' values.
+        - Each accelerometer is stationary and oriented such that the gravity vector
+          is measurable during the calibration period.
     """
     if not mpu_list:
         return None
@@ -147,18 +177,26 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
 
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
     """
-    Saves calibration data to a master calibration file, appending new data to the existing file.
+    Saves LVDT and/or accelerometer calibration data to a log file.
+
+    Appends the new calibration parameters (slopes, intercepts, offsets, scaling factors)
+    with a timestamp to the beginning of the master calibration file specified in the config.
+    Existing content in the file is preserved below the new entry.
 
     Args:
-        config: System configuration object containing the 'logs_dir' attribute.
-        lvdt_systems: List of LVDT calibration dictionaries (optional).
-        accel_offsets: List of accelerometer calibration dictionaries (optional).
+        config: The system configuration object, expected to have a `logs_dir` attribute.
+        lvdt_systems (list, optional): A list of LVDT calibration dictionaries
+                                       (output from `initialize_lvdt`). Defaults to None.
+        accel_offsets (list, optional): A list of accelerometer calibration dictionaries
+                                        (output from `multiple_accelerometers`). Defaults to None.
 
     Returns:
-        The path to the calibration file, or None if an error occurred.
+        str or None: The path to the calibration file if saving was successful,
+                     otherwise None.
 
-    Assumptions:
-        - The 'config' object has a 'logs_dir' attribute specifying the directory to save the calibration file.
+    Side Effects:
+        - Creates or modifies the 'calibration_data.txt' file in the `config.logs_dir`.
+        - Prints success or error messages to the console.
     """
     try:
         cal_file = os.path.join(config.logs_dir, "calibration_data.txt")
