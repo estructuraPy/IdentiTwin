@@ -12,11 +12,9 @@ import os
 import numpy as np
 from datetime import datetime
 import matplotlib
-# Keep pyplot import if plotting might be enabled via CLI
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # Import pyplot
 import traceback # Import traceback
-# queue is not directly used here, consider removing if not needed by future logic in this file
-# import queue
+import queue # Add queue import
 
 # Set a suitable interactive backend BEFORE importing pyplot or other matplotlib modules
 # Try TkAgg first, fall back if needed. Avoid 'agg' here for live plots.
@@ -37,9 +35,8 @@ from identitwin import configurator
 from identitwin.system_monitoring import MonitoringSystem
 # from identitwin.event_monitoring import EventMonitor # Unused import
 from identitwin import calibration
-# state is used indirectly by other modules, keep import
-from identitwin import state
-from identitwin import report_generator
+from identitwin import state  # Added import for state module
+from identitwin import report_generator  # Add this import
 
 # Define default values using uppercase constants - these can be overridden by CLI arguments
 ACCEL_SAMPLING_RATE = 200.0  # Hz - Default value
@@ -61,13 +58,11 @@ POST_TRIGGER_TIME = 15.0  # seconds
 MIN_EVENT_DURATION = 2.0  # seconds
 
 # Define which sensors and features are active (user configuration)
-# These serve as defaults if not overridden by CLI args
 enable_lvdt = True       # Enable LVDT measurements
 enable_accel = True      # Enable accelerometer measurements
 
 # Define which plots are active (user configuration)
-# These serve as defaults if not overridden by CLI args
-enable_plots = True         # Enable plotting (master switch)
+enable_plots = True         # Enable plotting
 enable_plot_displacement = True  # Enable LVDT displacement plots
 enable_accel_plots = False       # Enable acceleration plots
 enable_fft_plots = False         # Enable FFT plots
@@ -292,86 +287,41 @@ def create_system_config():
 
 def main():
     """Main function to initialize and run the monitoring system."""
-    # Correct indentation for the start of the function
+    # Parse command-line arguments
     print_banner()
-    args = parse_arguments()
-    apply_cli_args(args) # Apply CLI args to override defaults
 
-    # Validate configuration after applying CLI args
+    args = parse_arguments()
+    apply_cli_args(args)
+
+    # Validate configuration
     if not enable_lvdt and not enable_accel:
-        print("Error: At least one sensor type (LVDT or accelerometer) must be enabled.")
+        print("At least one sensor type (LVDT or accelerometer) must be enabled.")
         sys.exit(1)
 
-    # Plotting is now controlled by apply_cli_args based on defaults and CLI flags.
-    # Remove the forced disabling:
-    # global enable_plots, enable_plot_displacement, enable_accel_plots, enable_fft_plots
-    # enable_plots = False
-    # enable_plot_displacement = False
-    # enable_accel_plots = False
-    # enable_fft_plots = False
+    # Force disable all plotting features as visualization module is removed
+    global enable_plots, enable_plot_displacement, enable_accel_plots, enable_fft_plots
+    enable_plots = False
+    enable_plot_displacement = False
+    enable_accel_plots = False
+    enable_fft_plots = False
 
+    # Print configuration summary
     print("\n======================== Identitwin Monitoring System =========================\n")
 
     # Apply simulation mode overrides if specified
     if args.simulation:
-        print("Simulation mode enabled: Overriding hardware creation methods...")
-        # Store original methods before patching
-        original_create_ads1115 = configurator.SystemConfig.create_ads1115
-        original_create_lvdt_channels = configurator.SystemConfig.create_lvdt_channels
-        original_create_accelerometers = configurator.SystemConfig.create_accelerometers
-
-        # Patch methods with simulated versions
-        configurator.SystemConfig.create_ads1115 = simulated_create_ads1115
-        configurator.SystemConfig.create_lvdt_channels = simulated_create_lvdt_channels
-        configurator.SystemConfig.create_accelerometers = simulated_create_accelerometers
-        print("Using simulated sensors.")
+        original_init = configurator.SystemConfig.__init__
+        def new_init(self, *a, **kw):
+            original_init(self, *a, **kw)
+            # Override hardware creation methods with simulated versions
+            self.create_ads1115 = simulated_create_ads1115.__get__(self, configurator.SystemConfig)
+            self.create_lvdt_channels = simulated_create_lvdt_channels.__get__(self, configurator.SystemConfig)
+            self.create_accelerometers = simulated_create_accelerometers.__get__(self, configurator.SystemConfig)
+        configurator.SystemConfig.__init__ = new_init
+        print("Simulation mode enabled: Using simulated sensors.")
     else:
         print("Real hardware mode enabled.")
-        # Add early I2C check for hardware mode
-        print("\nPerforming initial hardware checks...")
-        try:
-            # FIRST: Check if hardware modules were loaded successfully in configurator.py
-            if not configurator._HARDWARE_AVAILABLE:
-                 # Display the specific error message from configurator
-                 error_details = configurator._HARDWARE_ERROR_MESSAGE or "Unknown hardware import error"
-                 print(f"  ERROR: Hardware interface modules failed to load.")
-                 print(f"  Details: {error_details}") # Show the specific error
-                 print("  Cannot proceed in hardware mode. Check installations and system compatibility.")
-                 print("  Common issues:")
-                 print("    - Missing libraries (run pip install -r requirements.txt or install manually)")
-                 print("    - Running on an incompatible OS (e.g., Windows without Blinka)")
-                 print("    - Incorrect Python environment")
-                 print("  Consider running in --simulation mode if hardware is unavailable.")
-                 sys.exit(1) # Exit if essential hardware modules are missing
 
-            # If modules loaded, proceed with I2C check
-            import board # Already imported in configurator, but good practice here too
-            import busio
-            print("  Attempting to initialize I2C bus...")
-            # ... (rest of the I2C check logic remains the same) ...
-            i2c = busio.I2C(board.SCL, board.SDA)
-            print("  I2C bus initialized successfully.")
-            while not i2c.try_lock():
-                pass # Wait for lock
-            try:
-                print("  Scanning I2C devices...")
-                addresses = i2c.scan()
-                if addresses:
-                    print(f"  Found I2C devices at: {[hex(addr) for addr in addresses]}")
-                else:
-                    print("  WARNING: No I2C devices found. Check wiring and power.")
-            finally:
-                i2c.unlock()
-        except Exception as i2c_err:
-            # This block now only catches errors during the I2C check itself
-            print(f"  ERROR during I2C check: {i2c_err}")
-            print("  Please ensure I2C is enabled (raspi-config) and hardware is connected correctly.")
-            # Exit if initial I2C check fails critically in hardware mode
-            # Consider making this conditional or adding a '--force' flag if needed
-            print("Exiting due to I2C initialization failure.")
-            sys.exit(1)
-
-    # Print configuration summary
     print(f"Operation: {get_operation_mode_name()}")
     print("\nSensor Configuration:")
     print(f"  - LVDT Enabled: {enable_lvdt}")
@@ -404,30 +354,17 @@ def main():
         os.makedirs(config.logs_dir, exist_ok=True)
         os.makedirs(config.reports_dir, exist_ok=True)
 
-    # Add operational mode and final plot status to config
+    # Add operational mode to config
     config.operational_mode = get_operation_mode_name()
-    # Ensure config reflects the actual plot status after CLI args
-    config.enable_plots = enable_plots
-    config.enable_plot_displacement = enable_plot_displacement
-    config.enable_accel_plots = enable_accel_plots
-    config.enable_fft_plots = enable_fft_plots
+    config.enable_plots = enable_plots  # This should now be False
 
     # Initialize the monitoring system
-    print("\nInitializing Monitoring System...")
     monitor_system = MonitoringSystem(config)
-
-    # Initialize plot queue only if plots are enabled
-    if config.enable_plots:
-         # Assuming plot queue might be needed by visualization module (if reintroduced)
-         # For now, keep it None as visualization is not fully integrated/used
-         monitor_system.plot_queue = None # Placeholder
-         print("Plotting enabled (Note: Visualization module integration may be needed).")
-    else:
-         monitor_system.plot_queue = None
-         print("Plotting disabled.")
-
-    # Initialize LEDs safely
-    print("Initializing LEDs...")
+    
+    # No plot queue needed
+    monitor_system.plot_queue = None
+    
+    # Initialize LEDs safely, handling potential None values
     try:
         monitor_system.status_led, monitor_system.activity_led = config.initialize_leds()
     except Exception as e:
@@ -435,150 +372,101 @@ def main():
         monitor_system.status_led = None
         monitor_system.activity_led = None
 
-    print(f"\n=========================== Sensor Setup & Calibration ===========================\n")
+    print(f"\n=========================== Calibration and zeroing ===========================\n")
+    print("\nKeep the devices completely still during this process")
 
     try:
-        # Setup sensors (this calls the create_* methods in config)
-        print("Setting up sensors...")
+        # Setup sensors (creates hardware instances via config methods)
         monitor_system.setup_sensors() # This now calls the potentially overridden create_* methods
-        print("Sensor setup process completed.")
 
-        # Check if sensors were actually created before attempting calibration
-        # Use hasattr for safer checks
-        sensors_ok = True
-        if config.enable_lvdt and (not hasattr(monitor_system, 'lvdt_channels') or not monitor_system.lvdt_channels):
-            print("Error: LVDT enabled but channels failed to initialize.")
-            sensors_ok = False
-        if config.enable_accel and (not hasattr(monitor_system, 'accelerometers') or not monitor_system.accelerometers):
-            print("Error: Accelerometers enabled but failed to initialize.")
-            sensors_ok = False
-
-        if not sensors_ok:
-             print("\nSkipping calibration due to sensor initialization errors.")
-             # Ensure calibration params are None if sensors failed
-             config.lvdt_calibration_params = None
-             # Keep existing accel_offsets or defaults if accel failed
+        # Calibrate LVDTs if enabled
+        if config.enable_lvdt and monitor_system.lvdt_channels:
+            print("Calibrating LVDTs...")
+            # Pass LVDT_SLOPES to initialize_lvdt
+            lvdt_systems = calibration.initialize_lvdt(channels=monitor_system.lvdt_channels,
+                                                     slopes=LVDT_SLOPES,
+                                                     config=config)
+            # Store calibration results in config (optional, if needed elsewhere)
+            # config.lvdt_calibration = lvdt_systems # Example
         else:
-            print("\nKeep the devices completely still during calibration...")
-            time.sleep(1) # Short pause before calibration
+            print("LVDT calibration skipped (disabled or channels not available).")
 
-            # Calibrate LVDTs if enabled and initialized
-            if config.enable_lvdt and monitor_system.lvdt_channels:
-                print("\nCalibrating LVDTs...")
-                try:
-                    lvdt_cal_params = calibration.initialize_lvdt(
-                        channels=monitor_system.lvdt_channels,
-                        slopes=LVDT_SLOPES, # Pass the globally defined slopes
-                        config=config # Pass config to save calibration data
-                    )
-                    # Store calibration results in config for use during acquisition
-                    if lvdt_cal_params and len(lvdt_cal_params) == len(monitor_system.lvdt_channels):
-                        config.lvdt_calibration_params = lvdt_cal_params # Store the list
-                        print("LVDT calibration successful.")
-                        # Optional: Print the calibration results for verification
-                        for i, params in enumerate(lvdt_cal_params):
-                            print(f"  LVDT {i+1} Calibrated: Slope={params['lvdt_slope']:.4f}, Intercept={params['lvdt_intercept']:.4f}")
-                    else:
-                         print("Warning: LVDT calibration did not return expected parameters.")
-                         config.lvdt_calibration_params = None # Ensure it's None if calibration failed
-                except Exception as cal_e:
-                    print(f"Error during LVDT calibration: {cal_e}")
-                    traceback.print_exc()
-                    config.lvdt_calibration_params = None # Ensure it's None on error
+        # Calibrate accelerometers if enabled
+        if config.enable_accel and monitor_system.accelerometers:
+            print("Calibrating accelerometers...")
+            # Use the accelerometers created during setup_sensors
+            accel_offsets = calibration.multiple_accelerometers(
+                mpu_list=monitor_system.accelerometers,
+                calibration_time=2.0,
+                config=config
+            )
+            if accel_offsets:
+                # Store the calculated offsets in the config for use in data acquisition
+                config.accel_offsets = accel_offsets
+                print("Accelerometer calibration complete.")
             else:
-                print("\nLVDT calibration skipped (disabled or channels not available).")
-                config.lvdt_calibration_params = None # Ensure it's None if skipped
+                print("Accelerometer calibration failed.")
+        else:
+             print("Accelerometer calibration skipped (disabled or sensors not available).")
 
-            # Calibrate accelerometers if enabled and initialized
-            if config.enable_accel and monitor_system.accelerometers:
-                print("\nCalibrating accelerometers...")
-                try:
-                    accel_offsets = calibration.multiple_accelerometers(
-                        mpu_list=monitor_system.accelerometers,
-                        calibration_time=2.0, # Duration for calibration
-                        config=config # Pass config to save calibration data
-                    )
-                    if accel_offsets:
-                        config.accel_offsets = accel_offsets # Overwrite default/previous offsets
-                        print("Accelerometer calibration complete.")
-                    else:
-                        print("Warning: Accelerometer calibration failed or returned no offsets.")
-                        # Keep existing/default offsets if calibration fails
-                except Exception as cal_e:
-                    print(f"Error during accelerometer calibration: {cal_e}")
-                    traceback.print_exc()
-                    # Keep existing/default offsets on error
-            else:
-                 print("\nAccelerometer calibration skipped (disabled or sensors not available).")
+        # Initialize data processing (CSV files) and visualization variables
+        print("\n================== Init data processing =====================\n") # Updated title
+        # Set window duration before initializing processing
+        config.window_duration = 10.0  # seconds of data visible
+        monitor_system.initialize_processing() # This initializes plot_vars internally if plots enabled
 
-        # Initialize data processing (CSV files)
-        print("\n================== Initializing Data Processing =====================\n")
-        # Set window duration before initializing processing (if used by processing)
-        # config.window_duration = 10.0 # Example if needed
-        monitor_system.initialize_processing()
+        # Remove visualization initialization call
+        # if config.enable_plots:
+        #     visualization.init_plots(...)
 
-        # Generate system report (after potential calibration updates)
-        print("Generating system report...")
+        # Generate system report
         system_report_file = os.path.join(config.reports_dir, "system_report.txt")
         report_generator.generate_system_report(config, system_report_file)
 
-        # Start monitoring threads only if sensors initialized correctly OR in simulation mode
-        if sensors_ok or args.simulation:
-            print("\nStarting monitoring threads...")
-            monitor_system.start_monitoring()
+        # Start monitoring threads
+        monitor_system.start_monitoring()
 
-            # Main loop
-            print("\nMonitoring active. Press Ctrl+C to exit.")
-            while monitor_system.running:
-                # Status LED blink
-                if monitor_system.status_led:
-                    try:
-                        # Blink briefly without blocking background tasks
-                        monitor_system.status_led.blink(on_time=0.05, off_time=0.95, n=1, background=True)
-                    except Exception as led_err:
-                        # Avoid crashing the main loop if LED fails
-                        print(f"Warning: Status LED blink failed: {led_err}", file=sys.stderr)
-                        monitor_system.status_led = None # Prevent further attempts
-                time.sleep(1.0) # Main loop sleep, status prints handled by monitor thread
+        # Main loop - modified to work without visualization
+        print("\nMonitoring active. Press Ctrl+C to exit.")
+        while monitor_system.running:
+            # Simple status display instead of visualization
+            if monitor_system.status_led:
+                # Use a try-except block for robustness if LED access fails
+                try:
+                    monitor_system.status_led.blink(on_time=0.1, off_time=0.1, n=1, background=True)
+                except Exception as led_err:
+                    # Avoid crashing the main loop if LED fails
+                    print(f"Warning: Status LED blink failed: {led_err}", file=sys.stderr)
+                    monitor_system.status_led = None # Prevent further attempts if it fails once
+            time.sleep(0.5) # Main loop sleep
 
-            # Wait for threads to finish after loop exits
-            print("\nWaiting for threads to complete...")
-            if hasattr(monitor_system, "acquisition_thread") and monitor_system.acquisition_thread.is_alive():
-                monitor_system.acquisition_thread.join(timeout=2.0)
-            if hasattr(monitor_system, "event_thread") and monitor_system.event_thread.is_alive():
-                monitor_system.event_thread.join(timeout=2.0)
+        # Wait for threads to finish after loop exits (e.g., after KeyboardInterrupt)
+        if hasattr(monitor_system, "acquisition_thread") and monitor_system.acquisition_thread.is_alive():
+            monitor_system.acquisition_thread.join(timeout=1.0)
+        if hasattr(monitor_system, "event_thread") and monitor_system.event_thread.is_alive():
+            monitor_system.event_thread.join(timeout=1.0)
 
-            # Generate final summary report
-            print("Generating summary report...")
-            summary_report_file = os.path.join(config.reports_dir, "summary_report.txt")
-            report_generator.generate_summary_report(monitor_system, summary_report_file)
-        else:
-            print("\nMonitoring cannot start due to sensor initialization errors.")
+        # Generate final summary report
+        summary_report_file = os.path.join(config.reports_dir, "summary_report.txt")
+        report_generator.generate_summary_report(monitor_system, summary_report_file)
 
     except KeyboardInterrupt:
         print("\nProgram stopped by user")
+        # Ensure monitoring is stopped if interrupted
         if 'monitor_system' in locals() and monitor_system.running:
             monitor_system.stop_monitoring()
-    except RuntimeError as e: # Catch runtime errors from sensor init
-         print(f"\nFATAL RUNTIME ERROR during initialization: {e}")
-         traceback.print_exc()
-         print("System cannot start.")
     except Exception as e:
-        print(f"\nUNEXPECTED ERROR in main execution: {e}")
-        traceback.print_exc()
+        print(f"\nError in monitoring system: {e}")
+        traceback.print_exc() # Use traceback for detailed error
     finally:
         # Clean up
-        print("\nCleaning up resources...")
+        print("\nCleaning up...")
         if 'monitor_system' in locals():
-            monitor_system.cleanup() # cleanup calls stop_monitoring internally
-
-        # Restore original hardware methods if they were patched for simulation
-        if args.simulation:
-             print("Restoring original hardware methods...")
-             configurator.SystemConfig.create_ads1115 = original_create_ads1115
-             configurator.SystemConfig.create_lvdt_channels = original_create_lvdt_channels
-             configurator.SystemConfig.create_accelerometers = original_create_accelerometers
-
+            monitor_system.cleanup()
+        # Remove visualization cleanup call
+        # if 'visualization' in sys.modules and 'config' in locals() and config.enable_plots:
+        #     print("Closing plot windows (stub)...")
+        #     visualization.close_plots()
         print("Done!")
 
 if __name__ == "__main__":

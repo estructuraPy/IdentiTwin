@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.10"
+version = "0.0.1"
 description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
@@ -13,7 +13,6 @@ authors = [
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = ["requirements-parser>=0.5.0"]
 
 [tool.setuptools]
 packages = ["identitwin"]
@@ -21,6 +20,3 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
 identitwin = ["tests/*.py"]
-
-[tool.setuptools.dynamic]
-dependencies = ["requirements.txt"]
