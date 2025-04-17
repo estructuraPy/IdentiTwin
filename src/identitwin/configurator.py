@@ -35,7 +35,6 @@ try:
     import busio
     from adafruit_ads1x15.analog_in import AnalogIn
     from mpu6050 import mpu6050
-    HARDWARE_MODE = True
 except (ImportError, NotImplementedError):
     # For simulation mode, just define variables to avoid errors
     LED = None
@@ -44,17 +43,10 @@ except (ImportError, NotImplementedError):
     busio = None
     AnalogIn = None
     mpu6050 = None
-    HARDWARE_MODE = False
 
-# Print platform information with appropriate context
-current_platform = platform.system()
-if current_platform == "Linux" and HARDWARE_MODE:
-    mode_message = "Hardware Mode (Raspberry Pi/Linux)"
-else:
-    mode_message = "Simulation Mode"
-
-print(f"Platform: {current_platform} {platform.release()}")
-print(f"Hardware detection: {mode_message}")
+# Print platform information
+print(f"Platform: {platform.system()} {platform.release()}")
+print("Hardware detection: Raspberry Pi/Hardware Mode")
 
 
 class SystemConfig:
@@ -170,15 +162,15 @@ class SystemConfig:
         self.gpio_pins = gpio_pins if gpio_pins is not None else [18, 17]
 
         # Validate rates and print warnings if needed
-        if self.sampling_rate_acceleration != sampling_rate_acceleration:
+        if self.sampling_rate_acceleration != 100.0:
             print(
-                f"Warning: Accelerometer rate limited to {self.sampling_rate_acceleration} Hz (requested: {sampling_rate_acceleration} Hz)"
+                f"Warning: Accelerometer rate limited to {self.sampling_rate_acceleration} Hz (requested: {100.0} Hz)"
             )
-        if self.sampling_rate_lvdt != sampling_rate_lvdt:
-            print(f"Warning: LVDT rate limited to {self.sampling_rate_lvdt} Hz (requested: {sampling_rate_lvdt} Hz)")
-        if self.plot_refresh_rate != plot_refresh_rate:
+        if self.sampling_rate_lvdt != 5.0:
+            print(f"Warning: LVDT rate limited to {self.sampling_rate_lvdt} Hz (requested: {5.0} Hz)")
+        if self.plot_refresh_rate != 10.0:
             print(
-                f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {plot_refresh_rate} Hz)"
+                f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {10.0} Hz)"
             )
 
     def _initialize_output_directory(self, custom_dir=None):
