@@ -35,6 +35,7 @@ from collections import deque
 from datetime import datetime
 import logging
 import queue
+import matplotlib.pyplot as plt # Added import for plt.close
 
 from . import state
 from . import processing_data, processing_analysis
@@ -42,22 +43,49 @@ from . import processing_data, processing_analysis
 # system_monitoring.py
 class MonitoringSystem:
     """
-    System-level monitoring class for the IdentiTwin system.
-    Handles sensor setup, data acquisition, and system-level operations.
+    Manages the overall monitoring process for the IdentiTwin system.
+
+    This class orchestrates sensor initialization, data acquisition,
+    performance monitoring, event detection, data storage, and system cleanup.
+    It utilizes multi-threading for concurrent data acquisition and event processing.
+
+    Attributes:
+        config: Configuration object containing system parameters.
+        running (bool): Flag indicating if the monitoring system is active.
+        data_queue (deque): Queue for storing recent sensor data points.
+        acquisition_thread (threading.Thread): Thread responsible for acquiring data.
+        event_thread (threading.Thread): Thread responsible for monitoring events.
+        event_monitor (EventMonitor): Instance for handling event detection logic.
+        sensors_initialized (bool): Flag indicating if sensors have been set up.
+        performance_stats (dict): Dictionary holding performance metrics.
+        last_lvdt_readings (list): Cache for the most recent LVDT readings.
+        csv_file_general (str): Path to the general measurements CSV file.
+        csv_file_displacement (str): Path to the LVDT displacement CSV file.
+        csv_file_acceleration (str): Path to the accelerometer data CSV file.
+        status_led: GPIO LED object for status indication.
+        activity_led: GPIO LED object for activity indication.
+        ads: ADS1115 ADC object for LVDT readings.
+        lvdt_channels: List of ADC channels configured for LVDTs.
+        accelerometers: List of accelerometer sensor objects.
+        event_count (int): Counter for detected events.
     """
 
     def __init__(self, config):
         """
-        Initialize the monitoring system with the provided configuration.
+        Initializes the MonitoringSystem.
+
+        Sets up initial state, data structures, performance monitoring variables,
+        and LVDT reading cache based on the provided configuration.
 
         Args:
-            config: Configuration object for the system.
+            config: An object containing all necessary configuration parameters
+                    (e.g., sensor settings, sampling rates, file paths, thresholds).
 
         Returns:
             None
 
         Assumptions:
-            - The configuration object (config) is properly initialized and contains necessary parameters.
+            - The `config` object is fully populated and valid.
         """
         self.config = config
         self.running = False
@@ -99,14 +127,25 @@ class MonitoringSystem:
 
     def setup_sensors(self):
         """
-        Set up sensors based on the configuration.
-        Initializes LVDTs, accelerometers, and LEDs.
+        Initializes and configures hardware sensors based on the system configuration.
+
+        Sets up LEDs for status/activity indication, the ADS1115 ADC for LVDTs
+        (if enabled), and the accelerometer sensors (if enabled).
 
         Returns:
             None
 
+        Raises:
+            Exception: If any error occurs during sensor initialization (e.g.,
+                       hardware connection issues, configuration errors).
+
+        Side Effects:
+            - Initializes hardware components (LEDs, ADC, Accelerometers).
+            - Sets the `sensors_initialized` flag to True upon success.
+            - Prints error messages and traceback if initialization fails.
+
         Assumptions:
-            - The configuration object contains the necessary information to initialize sensors.
+            - The `config` object contains valid parameters for sensor setup.
         """
         try:
             # Initialize LEDs
@@ -129,15 +168,25 @@ class MonitoringSystem:
 
     def initialize_processing(self):
         """
-        Initialize data processing and CSV file creation.
-        Creates CSV files and plot variables necessary for data storage and visualization.
+        Sets up data storage mechanisms, primarily CSV files.
+
+        Creates and initializes header rows for the general measurements CSV file,
+        and specific CSV files for displacement (LVDT) and acceleration data
+        if those sensors are enabled in the configuration.
 
         Returns:
             None
 
+        Side Effects:
+            - Creates CSV files in the directory specified by `config.output_dir`.
+            - Writes header rows to the created CSV files.
+            - Stores file paths in `self.csv_file_general`, `self.csv_file_displacement`,
+              and `self.csv_file_acceleration`.
+
         Assumptions:
-            - Configuration object is properly initialized and contains necessary parameters
-              such as output directory, number of LVDTs/accelerometers, sampling rates, etc.
+            - `config.output_dir` specifies a writable directory path.
+            - Sensor enablement flags (`config.enable_lvdt`, `config.enable_accel`)
+              and counts (`config.num_lvdts`, `config.num_accelerometers`) are correctly set.
         """
         # Create general measurements CSV
         self.csv_file_general = os.path.join(
@@ -170,15 +219,28 @@ class MonitoringSystem:
 
     def start_monitoring(self):
         """
-        Start the monitoring system.
-        Initializes threads for data acquisition and starts hardware components.
+        Starts the main monitoring loop and associated threads.
+
+        Activates the status LED, sets the `running` flag to True, and launches
+        the data acquisition thread. If event detection is configured, it also
+        initializes and starts the event monitoring thread.
 
         Returns:
             None
 
+        Side Effects:
+            - Turns on the status LED (if available).
+            - Sets `self.running` to True.
+            - Starts `self.acquisition_thread`.
+            - Initializes `self.event_monitor` and starts `self.event_thread` if
+              event detection thresholds are configured.
+            - Prints an error message if sensors are not initialized first.
+
         Assumptions:
-            - Sensors are initialized before calling this method.
-            - Configuration includes necessary parameters.
+            - `setup_sensors()` has been called successfully.
+            - `initialize_processing()` has been called successfully.
+            - The configuration object (`self.config`) contains necessary parameters
+              for threading and optional event monitoring.
         """
         if not self.sensors_initialized:
             print("Error: Sensors are not initialized. Call setup_sensors() first.")
@@ -236,11 +298,20 @@ class MonitoringSystem:
 
     def stop_monitoring(self):
         """
-        Stop the monitoring system.
-        Terminates threads and turns off LEDs.
+        Stops the monitoring system and all running threads gracefully.
+
+        Sets the `running` flag to False, signals threads to terminate, waits for
+        them to join, turns off status/activity LEDs, and updates the final event count.
 
         Returns:
             None
+
+        Side Effects:
+            - Sets `self.running` to False.
+            - Joins `self.acquisition_thread` and `self.event_thread` (if running).
+            - Turns off status and activity LEDs (if available).
+            - Updates `self.event_count` from the event monitor's shared reference.
+            - Prints a confirmation message.
         """
         self.running = False
 
@@ -270,11 +341,18 @@ class MonitoringSystem:
 
     def cleanup(self):
         """
-        Clean up resources used by the monitoring system.
-        Closes plots and releases hardware resources.
+        Performs cleanup operations after monitoring has stopped.
+
+        Ensures monitoring is stopped, closes any open Matplotlib plots, and prints
+        a confirmation message.
 
         Returns:
             None
+
+        Side Effects:
+            - Calls `self.stop_monitoring()`.
+            - Closes all Matplotlib figures.
+            - Prints a confirmation message.
         """
         self.stop_monitoring()
         # Use plt.close directly instead of non-existent visualization.close_all_plots
@@ -283,10 +361,17 @@ class MonitoringSystem:
 
     def wait_for_completion(self):
         """
-        Wait for monitoring to complete (blocks until interrupted).
+        Blocks execution until the monitoring process is stopped.
+
+        This method keeps the main thread alive while the data acquisition thread
+        is running. It allows the system to run indefinitely until manually
+        interrupted (e.g., by Ctrl+C) or stopped via `stop_monitoring()`.
 
         Returns:
             None
+
+        Handles KeyboardInterrupt:
+            Calls `stop_monitoring()` if a KeyboardInterrupt occurs.
         """
         try:
             # Keep waiting while the monitoring thread is active
@@ -302,11 +387,34 @@ class MonitoringSystem:
 
     def _data_acquisition_thread(self):
         """
-        Thread for data acquisition from sensors.
-        Collects data from LVDTs and accelerometers and stores it in the queue and CSV files.
+        Core thread function for acquiring data from enabled sensors.
+
+        This method runs in a loop while `self.running` is True. It precisely times
+        the acquisition of data from accelerometers and LVDTs based on configured
+        sampling rates, applies calibration, updates performance statistics,
+        stores data in the shared queue (`self.data_queue`), writes data to
+        respective CSV files, toggles the activity LED, and periodically prints
+        status updates. It employs drift compensation logic to maintain accurate
+        sampling intervals.
 
         Returns:
             None
+
+        Side Effects:
+            - Continuously reads data from sensors (accelerometers, LVDTs).
+            - Appends acquired data to `self.data_queue`.
+            - Writes data rows to `self.csv_file_general`, `self.csv_file_acceleration`,
+              and `self.csv_file_displacement`.
+            - Updates `self.performance_stats`.
+            - Toggles the activity LED.
+            - Prints status information to the console periodically.
+            - Handles potential sensor reading errors gracefully.
+            - Prints error messages and traceback if critical errors occur.
+
+        Assumptions:
+            - Sensors are initialized and configured correctly.
+            - CSV files are initialized.
+            - `self.running` flag controls the loop execution.
         """
         try:
             # Initialize timers for precise control
@@ -527,10 +635,15 @@ class MonitoringSystem:
 
     def _precise_sleep(self, sleep_time):
         """
-        Implements precise sleep using a combination of sleep and active waiting.
+        Implements a high-precision sleep function.
+
+        Uses a combination of `time.sleep()` for longer durations and busy-waiting
+        (`while time.perf_counter() < target: pass`) for the final milliseconds
+        to achieve more accurate timing than `time.sleep()` alone, especially for
+        short intervals.
 
         Args:
-            sleep_time: Time in seconds to sleep.
+            sleep_time (float): The desired sleep duration in seconds.
 
         Returns:
             None
@@ -555,10 +668,19 @@ class MonitoringSystem:
 
     def _update_performance_stats(self):
         """
-        Calculate performance statistics for sampling rates and jitter.
+        Calculates and updates performance metrics like sampling rate and jitter.
+
+        Analyzes the timestamps of recent accelerometer and LVDT readings stored
+        in `self.performance_stats` to compute the actual average sampling rate
+        and the standard deviation of the sampling periods (jitter).
 
         Returns:
             None
+
+        Side Effects:
+            - Updates the `sampling_rate_acceleration`, `accel_jitter`,
+              `sampling_rate_lvdt`, and `lvdt_jitter` keys within
+              `self.performance_stats`.
         """
         # Calculate accelerometer performance
         if len(self.performance_stats["accel_periods"]) > 1:
@@ -592,13 +714,29 @@ class MonitoringSystem:
 
     def _print_status(self, sensor_data):
         """
-        Print current system status information.
+        Prints a formatted status update to the console.
+
+        Displays the current time, performance statistics (sampling rates, jitter),
+        the latest readings from LVDTs and accelerometers (using provided or cached data),
+        the number of detected events, and the current event recording status.
 
         Args:
-            sensor_data: A dictionary containing sensor data.
+            sensor_data (dict): A dictionary containing the most recent sensor readings
+                                for this cycle. Expected keys: 'timestamp', 'sensor_data'
+                                (which contains 'accel_data' and/or 'lvdt_data').
 
         Returns:
             None
+
+        Side Effects:
+            - Prints formatted information to standard output.
+            - Synchronizes the event count between the `EventMonitor` instance and the
+              shared `state` module if discrepancies are found.
+
+        Assumptions:
+            - `self.performance_stats` contains up-to-date performance data.
+            - `self.last_lvdt_readings` provides cached LVDT data if current data is missing.
+            - The `state` module and `EventMonitor` (if active) provide event status.
         """
         print("\n============================ System Status Update =============================\n")
         print(f"Time: {datetime.now().strftime('%H:%M:%S')}")
@@ -689,13 +827,14 @@ class MonitoringSystem:
 
     def _format_elapsed_time(self, elapsed_seconds):
         """
-        Format elapsed time in human-readable format.
+        Formats a duration in seconds into a human-readable string (D H M S).
 
         Args:
-            elapsed_seconds: Time in seconds.
+            elapsed_seconds (float): The total number of seconds.
 
         Returns:
-            Formatted time string.
+            str: A formatted string representing the duration (e.g., "1d 2h 3m 4s",
+                 "5h 10m 30s", "15m 0s", "45s").
         """
         minutes, seconds = divmod(int(elapsed_seconds), 60)
         hours, minutes = divmod(minutes, 60)
