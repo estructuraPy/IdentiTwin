@@ -43,7 +43,7 @@ LVDT_SAMPLING_RATE = 5.0     # Hz - Default value
 PLOT_REFRESH_RATE = 10.0     # Hz - Default value
 
 NUM_LVDTS = 2
-NUM_ACCELS = 2
+NUM_ACCELS = 4
 LVDT_SLOPES = [19.86, 19.85]  # Global definition of LVDT slopes
 
 ACCEL_TRIGGER_THRESHOLD = 0.981  # m/s^2 (0.1g)
@@ -485,10 +485,6 @@ def main():
         print("\nCleaning up...")
         if 'monitor_system' in locals():
             monitor_system.cleanup()
-        # Remove visualization cleanup call
-        # if 'visualization' in sys.modules and 'config' in locals() and config.enable_plots:
-        #     print("Closing plot windows (stub)...")
-        #     visualization.close_plots()
         print("Done!")
 
 if __name__ == "__main__":
