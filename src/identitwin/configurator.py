@@ -154,8 +154,8 @@ class SystemConfig:
 
         # Accelerometer configuration (from initialization.py)
         self.accel_offsets = [
-            {"x": -0.22, "y": -0.08, "z": 0.0},  # Offsets for accelerometer 1
-            {"x": -0.23, "y": -0.17, "z": 0.0},  # Offsets for accelerometer 2
+            {"x": 0.0, "y": 0.0, "z": 0.0},  # Offsets for accelerometer 1
+            {"x": 0.0, "y": 0.0, "z": 0.0},  # Offsets for accelerometer 2
         ]
 
         # LED configuration - default GPIO pins; can be modified from initialization or simulation
