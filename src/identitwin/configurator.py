@@ -162,15 +162,15 @@ class SystemConfig:
         self.gpio_pins = gpio_pins if gpio_pins is not None else [18, 17]
 
         # Validate rates and print warnings if needed
-        if self.sampling_rate_acceleration != 100.0:
+        if self.sampling_rate_acceleration != sampling_rate_acceleration:
             print(
-                f"Warning: Accelerometer rate limited to {self.sampling_rate_acceleration} Hz (requested: {100.0} Hz)"
+                f"Warning: Accelerometer rate limited to {self.sampling_rate_acceleration} Hz (requested: {sampling_rate_acceleration} Hz)"
             )
-        if self.sampling_rate_lvdt != 5.0:
-            print(f"Warning: LVDT rate limited to {self.sampling_rate_lvdt} Hz (requested: {5.0} Hz)")
+        if self.sampling_rate_lvdt != sampling_rate_lvdt:
+            print(f"Warning: LVDT rate limited to {self.sampling_rate_lvdt} Hz (requested: {sampling_rate_lvdt} Hz)")
         if self.plot_refresh_rate != 10.0:
             print(
-                f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {10.0} Hz)"
+                f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {plot_refresh_rate} Hz)"
             )
 
     def _initialize_output_directory(self, custom_dir=None):
