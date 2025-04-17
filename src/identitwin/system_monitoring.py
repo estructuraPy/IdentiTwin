@@ -109,8 +109,17 @@ class MonitoringSystem:
             - The configuration object contains the necessary information to initialize sensors.
         """
         try:
-            # Initialize LEDs
-            self.status_led, self.activity_led = self.config.initialize_leds()
+            # Initialize LEDs with error handling
+            try:
+                self.status_led, self.activity_led = self.config.initialize_leds()
+                if self.status_led:
+                    self.status_led.off()  # Ensure LED starts off
+                if self.activity_led:
+                    self.activity_led.off()  # Ensure LED starts off
+            except Exception as e:
+                logging.warning(f"LED initialization failed: {e}")
+                self.status_led = None
+                self.activity_led = None
 
             # Initialize ADS1115 ADC for LVDTs
             self.ads = self.config.create_ads1115()
@@ -184,12 +193,12 @@ class MonitoringSystem:
             print("Error: Sensors are not initialized. Call setup_sensors() first.")
             return
 
-        # Turn on status LED if available
+        # Turn on status LED safely
         if self.status_led:
             try:
                 self.status_led.on()
             except Exception as e:
-                print(f"")
+                logging.warning(f"Failed to turn on status LED: {e}")
 
         self.running = True
         # Start the data acquisition thread
@@ -255,11 +264,13 @@ class MonitoringSystem:
         ):
             self.event_thread.join(timeout=1.0)
 
-        # Turn off LEDs
-        if self.status_led:
-            self.status_led.off()
-        if self.activity_led:
-            self.activity_led.off()
+        # Turn off LEDs safely
+        for led in [self.status_led, self.activity_led]:
+            if led:
+                try:
+                    led.off()
+                except Exception as e:
+                    logging.warning(f"Failed to turn off LED: {e}")
 
         # Update event count from reference
         if hasattr(self, "event_monitor"):
@@ -485,9 +496,12 @@ class MonitoringSystem:
                             self.data_queue.popleft()
                             self.data_queue.append(sensor_data)
 
-                # Activity LED
+                # Activity LED - Toggle safely
                 if self.activity_led:
-                    self.activity_led.toggle()
+                    try:
+                        self.activity_led.toggle()
+                    except Exception as e:
+                        logging.debug(f"Failed to toggle activity LED: {e}")
 
                 # Update performance statistics periodically
                 if current_time - last_print_time >= stats_interval:
