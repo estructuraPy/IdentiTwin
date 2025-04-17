@@ -14,43 +14,36 @@ Key Features:
 - Resource usage tracking
 - Performance data logging
 - Alert generation for performance issues
-"""
 
+Classes:
+    PerformanceMonitor: Main class for tracking system performance
+
+The module helps ensure reliable data acquisition and system operation by
+monitoring key performance indicators and alerting when issues arise.
+"""
 import time
 import csv
 import threading
 import os
-import logging
+import numpy as np
 from datetime import datetime
 from collections import deque
+import logging
 
-import numpy as np
-
-# Conditional import of psutil
-try:
-    import psutil
-    HAS_PSUTIL = True
-except ImportError:
-    psutil = None
-    HAS_PSUTIL = False
-    print("psutil not found, CPU and memory usage will not be logged.")
-
-# Constants for output formatting
-TITLE = "[Performance Monitor]"
-CONTENT = "   >> "
-SPECIAL = "   ** "
-
-
+# performance_monitor.py
 class PerformanceMonitor:
     """Monitors and logs system performance metrics."""
 
     def __init__(self, config, log_file=None):
         """
-        Initializes the performance monitor.
+        Initialize the performance monitor.
 
         Args:
             config: Configuration object containing system settings.
             log_file: Path to the log file for performance data (optional).
+
+        Returns:
+            None
 
         Assumptions:
             - The configuration object has attributes for sampling rates and jitter thresholds.
@@ -76,7 +69,7 @@ class PerformanceMonitor:
             "uptime": 0.0,
         }
 
-        # Initialize log file
+        # Initialize log file if provided
         if self.log_file:
             self._init_log_file()
 
@@ -85,10 +78,8 @@ class PerformanceMonitor:
         self.monitor_thread = None
 
     def _init_log_file(self):
-        """Initializes the performance log file by writing the header.
-
-        Args:
-            None
+        """
+        Initialize the performance log file.
 
         Returns:
             None
@@ -113,10 +104,7 @@ class PerformanceMonitor:
 
     def start(self):
         """
-        Starts the performance monitoring thread.
-
-        Args:
-            None
+        Start performance monitoring.
 
         Returns:
             None
@@ -124,16 +112,15 @@ class PerformanceMonitor:
         if self.running:
             return
         self.running = True
-        self.monitor_thread = threading.Thread(target=self._monitor_thread, daemon=True)
+        self.monitor_thread = threading.Thread(
+            target=self._monitor_thread, daemon=True
+        )
         self.monitor_thread.start()
         print(f"{TITLE}Performance monitoring started")
 
     def stop(self):
         """
-        Stops the performance monitoring thread.
-
-        Args:
-            None
+        Stop performance monitoring.
 
         Returns:
             None
@@ -144,10 +131,10 @@ class PerformanceMonitor:
 
     def record_accel_timestamp(self, timestamp=None):
         """
-        Records an accelerometer acquisition timestamp.
+        Record accelerometer acquisition timestamp.
 
         Args:
-            timestamp: The timestamp to record. Defaults to the current time.
+            timestamp: Timestamp to record (optional, defaults to current time).
 
         Returns:
             None
@@ -163,10 +150,10 @@ class PerformanceMonitor:
 
     def record_lvdt_timestamp(self, timestamp=None):
         """
-        Records an LVDT acquisition timestamp.
+        Record LVDT acquisition timestamp.
 
         Args:
-            timestamp: The timestamp to record. Defaults to the current time.
+            timestamp: Timestamp to record (optional, defaults to current time).
 
         Returns:
             None
@@ -182,10 +169,7 @@ class PerformanceMonitor:
 
     def _update_accel_stats(self):
         """
-        Updates accelerometer performance statistics.
-
-        Args:
-            None
+        Update accelerometer performance statistics.
 
         Returns:
             None
@@ -212,10 +196,7 @@ class PerformanceMonitor:
 
     def _update_lvdt_stats(self):
         """
-        Updates LVDT performance statistics.
-
-        Args:
-            None
+        Update LVDT performance statistics.
 
         Returns:
             None
@@ -242,9 +223,6 @@ class PerformanceMonitor:
         """
         Thread for monitoring system resources and logging performance.
 
-        Args:
-            None
-
         Returns:
             None
         """
@@ -266,10 +244,8 @@ class PerformanceMonitor:
                 time.sleep(5.0)
 
     def _log_performance(self):
-        """Logs performance data to a CSV file.
-
-        Args:
-            None
+        """
+        Log performance data to file.
 
         Returns:
             None
@@ -300,10 +276,7 @@ class PerformanceMonitor:
 
     def get_status_report(self):
         """
-        Generates a formatted status report for display.
-
-        Args:
-            None
+        Get a formatted status report for display.
 
         Returns:
             A list of strings, each representing a line in the status report.
@@ -312,7 +285,9 @@ class PerformanceMonitor:
         report.append(
             f"Accelerometer Rate: {self.stats['sampling_rate_acceleration']:.2f} Hz (Target: {self.config.sampling_rate_acceleration:.1f} Hz)"
         )
-        report.append(f"Accelerometer Jitter: {self.stats['accel_jitter']:.2f} ms")
+        report.append(
+            f"Accelerometer Jitter: {self.stats['accel_jitter']:.2f} ms"
+        )
         report.append(
             f"LVDT Rate: {self.stats['sampling_rate_lvdt']:.2f} Hz (Target: {self.config.sampling_rate_lvdt:.1f} Hz)"
         )
