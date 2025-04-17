@@ -5,12 +5,6 @@ This module provides functionality for calibrating and initializing various sens
 - LVDT (Linear Variable Differential Transformer) displacement sensors
 - Accelerometers (MPU6050)
 
-The module handles:
-- Zero-point calibration for LVDTs
-- Accelerometer bias and scale factor calibration
-- Calibration data persistence and loading
-- Multi-sensor calibration procedures
-
 Key Features:
 - Automatic zero-point detection for LVDTs
 - Multiple sensor support with individual calibration parameters
@@ -20,22 +14,25 @@ Key Features:
 
 import time
 import os
+from datetime import datetime
 import numpy as np
-from datetime import datetime  # Add this import
-
 
 
 def initialize_lvdt(channels, slopes=None, config=None):
     """
     Initializes LVDT systems with calibration parameters.
-    Units: slope in mm/V, intercept in mm
 
     Args:
-        channels: List of channel objects representing LVDTs. Each channel must have a 'voltage' attribute.
-        slopes: List of slopes for each LVDT. If not provided, a default slope of 19.86 mm/V is used.
+        channels: List of LVDT channel objects with a 'voltage' attribute.
+        slopes: List of slopes (mm/V) for each LVDT. Defaults to 19.86 mm/V if not provided.
+        config: System configuration object for saving calibration data.
 
     Returns:
-        List of dictionaries, each with slope and intercept.
+        List of dictionaries, each containing 'lvdt_slope' and 'lvdt_intercept'.
+
+    Assumptions:
+        - Each channel object in 'channels' has a 'voltage' attribute representing the current voltage reading.
+        - LVDT slopes are provided in mm/V, and the intercept is calculated in mm.
     """
     if not channels or not isinstance(channels, list):
         raise ValueError("Invalid channels input.")
@@ -45,8 +42,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
 
     for i, channel in enumerate(channels):
         try:
-            # Use the provided slope or default to 19.86 mm/V
-            slope = slopes[i]
+            slope = slopes[i] if slopes else 19.86
             lvdt_system = zeroing_lvdt(channel, slope, label=f"LVDT-{i+1}")
             lvdt_systems.append(lvdt_system)
         except Exception as e:
@@ -60,16 +56,25 @@ def initialize_lvdt(channels, slopes=None, config=None):
 
 
 def zeroing_lvdt(channel, slope, label="LVDT"):
-    """Calibrate LVDT to adjust zero displacement."""
-    
-    # Read the initial voltage
+    """
+    Calibrates an LVDT to adjust for zero displacement.
+
+    Args:
+        channel: Channel object representing the LVDT.
+        slope: Slope of the LVDT (mm/V).
+        label: Label for the LVDT (e.g., "LVDT-1").
+
+    Returns:
+        Dictionary containing 'lvdt_slope' and 'lvdt_intercept'.
+
+    Assumptions:
+        - The 'channel' object has a 'voltage' attribute.
+    """
     voltage = channel.voltage
-    
-    # Calculate intercept to zero displacement
     intercept = -slope * voltage
+
     print(f" - {label} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
-    
-    # Return calibrated system
+
     return {
         'lvdt_slope': slope,
         'lvdt_intercept': intercept
@@ -78,16 +83,18 @@ def zeroing_lvdt(channel, slope, label="LVDT"):
 
 def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     """
-    Calibrates multiple accelerometers.
-    Returns bias offsets and scaling factors so that each axis reads near zero at rest.
+    Calibrates multiple accelerometers to determine bias offsets and scaling factors.
 
     Args:
-        mpu_list: List of MPU objects with 'get_accel_data()' method.
-        calibration_time: Duration in seconds to collect samples.
+        mpu_list: List of MPU objects with a 'get_accel_data()' method.
+        calibration_time: Duration (seconds) to collect samples for calibration. Defaults to 2.0 seconds.
+        config: System configuration object for saving calibration data.
 
     Returns:
-        List of dictionaries per MPU: {'x': ..., 'y': ..., 'z': ..., 'scaling_factor': ...}.
-        Subsequent accelerometer readings should be modified by the scaling factor.
+        List of dictionaries, each containing 'x', 'y', 'z' (bias offsets), and 'scaling_factor'.
+
+    Assumptions:
+        - Each MPU object in 'mpu_list' has a 'get_accel_data()' method returning a dictionary with 'x', 'y', 'z' values.
     """
     if not mpu_list:
         return None
@@ -112,18 +119,13 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
                 continue
 
         if x_samples:
-            # Calculate average values for each axis
             x_avg = np.mean(x_samples)
             y_avg = np.mean(y_samples)
             z_avg = np.mean(z_samples)
 
-            # Calculate the magnitude of the average acceleration
             magnitude = np.sqrt(x_avg**2 + y_avg**2 + z_avg**2)
-
-            # Calculate the scaling factor to adjust the magnitude to gravity
             scaling_factor = GRAVITY / magnitude
 
-            # Use the measured averages as offsets and scale them
             offset = {
                 'x': -x_avg,
                 'y': -y_avg,
@@ -144,16 +146,27 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
 
 
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
-    """Save calibration data to a master calibration file."""
+    """
+    Saves calibration data to a master calibration file, appending new data to the existing file.
+
+    Args:
+        config: System configuration object containing the 'logs_dir' attribute.
+        lvdt_systems: List of LVDT calibration dictionaries (optional).
+        accel_offsets: List of accelerometer calibration dictionaries (optional).
+
+    Returns:
+        The path to the calibration file, or None if an error occurred.
+
+    Assumptions:
+        - The 'config' object has a 'logs_dir' attribute specifying the directory to save the calibration file.
+    """
     try:
         cal_file = os.path.join(config.logs_dir, "calibration_data.txt")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Create new calibration content with timestamp header
+
         new_calibration = f"Calibration Data - {timestamp}\n"
         new_calibration += "-" * 50 + "\n\n"
-        
-        # Add accelerometer data first
+
         if accel_offsets:
             new_calibration += "Accelerometer Calibration:\n"
             new_calibration += "------------------------\n"
@@ -164,8 +177,7 @@ def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
                 new_calibration += f"  Z-offset: {offset['z']:.6f} m/s^2\n"
                 new_calibration += f"  Scaling factor: {offset['scaling_factor']:.6f}\n"
             new_calibration += "\n"
-        
-        # Then add LVDT data
+
         if lvdt_systems:
             new_calibration += "LVDT Calibration:\n"
             new_calibration += "-----------------\n"
@@ -175,18 +187,17 @@ def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
                 new_calibration += f"  Intercept: {lvdt['lvdt_intercept']:.6f} mm\n"
             new_calibration += "\n"
 
-        # Read and write calibration data
         existing_calibrations = ""
         if os.path.exists(cal_file):
             with open(cal_file, 'r') as f:
                 existing_calibrations = f.read()
 
         with open(cal_file, 'w') as f:
-            f.write(new_calibration)  # Write new calibration with timestamp
+            f.write(new_calibration)
             if existing_calibrations:
-                f.write("-" * 50 + "\n\n")  # Simple separator
+                f.write("-" * 50 + "\n\n")
                 f.write(existing_calibrations)
-                
+
         print(f"\nCalibration data saved to: {cal_file}\n")
         return cal_file
     except Exception as e:
