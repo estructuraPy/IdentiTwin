@@ -13,7 +13,7 @@ authors = [
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = ["-r requirements.txt"]
+dependencies = ["requirements-parser>=0.5.0"]
 
 [tool.setuptools]
 packages = ["identitwin"]
@@ -21,3 +21,6 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
 identitwin = ["tests/*.py"]
+
+[tool.setuptools.dynamic]
+dependencies = ["requirements.txt"]
