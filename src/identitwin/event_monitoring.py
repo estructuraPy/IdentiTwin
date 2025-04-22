@@ -174,10 +174,11 @@ class EventMonitor:
                 
                 if event_duration >= min_duration:
                     try:
-                        # Save event data only after the event has fully completed
-                        self.event_data_buffer.put(self.current_event_data)
-                        event_time = self.current_event_data[0]["timestamp"]
-                        self._save_event_data(self.current_event_data, event_time)
+                        # Include pretrigger and posttrigger data in the event
+                        complete_event_data = list(self.pre_trigger_buffer) + self.current_event_data
+                        self.event_data_buffer.put(complete_event_data)
+                        event_time = complete_event_data[0]["timestamp"]
+                        self._save_event_data(complete_event_data, event_time)
                         self.event_count_ref[0] += 1  # Increment event count here
                         state.set_event_variable("event_count", self.event_count_ref[0])
                         print(f"Event complete - duration={event_duration:.2f}s")
