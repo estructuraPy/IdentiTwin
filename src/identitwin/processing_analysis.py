@@ -91,9 +91,25 @@ def save_event_data(event_data, start_time, config, event_folder=None, displacem
         # Ensure event folder exists
         os.makedirs(event_folder, exist_ok=True)
 
-        print("Creating CSV files...")
-        
-        # Create sensor-specific CSV files first
+        # Define output files
+        report_file = os.path.join(event_folder, "report.txt")
+        npz_file = os.path.join(event_folder, "data.npz")
+
+        # Create parent directories if they don't exist
+        os.makedirs(os.path.dirname(report_file), exist_ok=True)
+
+        # Load or create NPZ data
+        if os.path.exists(npz_file):
+            try:
+                np_data = dict(np.load(npz_file))
+            except Exception:
+                np_data = extract_data_from_event(event_data, start_time, config)
+                np.savez(npz_file, **np_data)
+        else:
+            np_data = extract_data_from_event(event_data, start_time, config)
+            np.savez(npz_file, **np_data)
+
+        # Create sensor-specific CSV files
         if config.enable_lvdt and displacement_file is None:
             from .processing_data import create_displacement_csv
             displacement_file = create_displacement_csv(event_data, event_folder, config)
@@ -101,15 +117,7 @@ def save_event_data(event_data, start_time, config, event_folder=None, displacem
         if config.enable_accel and acceleration_file is None:
             from .processing_data import create_acceleration_csv
             acceleration_file = create_acceleration_csv(event_data, event_folder, config)
-        
-        print("Processing data for analysis...")
-        np_data = extract_data_from_event(event_data, start_time, config)
-        
-        print("Saving processed data...")
-        npz_file = os.path.join(event_folder, "data.npz")
-        np.savez(npz_file, **np_data)
-        
-        print("Generating analysis and plots...")
+        # Generate analysis
         success = generate_event_analysis(
             event_folder,
             np_data,
@@ -119,14 +127,11 @@ def save_event_data(event_data, start_time, config, event_folder=None, displacem
             displacement_file
         )
         
-        if success:
-            print("Analysis complete, report generated.")
-            return os.path.join(event_folder, "report.txt")
-            
-        return None
+        return report_file if success else None
 
     except Exception as e:
         print(f"Error in save_event_data: {e}")
+        import traceback
         traceback.print_exc()
         return None
 
@@ -219,7 +224,6 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
         t_main = np_data['timestamps']
         total_duration = t_main[-1] if len(t_main) > 0 else 0.0
         pre_trigger_time = getattr(config, 'pre_trigger_time', 5.0)
-        post_trigger_time = pre_trigger_time + getattr(config, 'post_trigger_time', 5.0)
         
         # Plot each accelerometer separately
         for accel_idx in range(config.num_accelerometers):
@@ -238,11 +242,9 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
                 
-                # Add vertical lines for pre-trigger and post-trigger times
+                # Add vertical line for pretrigger to event boundary
                 ax_time.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5, 
                               label=f'Event Start ({pre_trigger_time:.1f}s)')
-                ax_time.axvline(x=post_trigger_time, color='purple', linestyle='--', alpha=0.5, 
-                              label=f'Post-trigger Start ({post_trigger_time:.1f}s)')
                 
                 ax_time.set_xlabel('Time (s)')
                 ax_time.set_ylabel('Acceleration (m/s²)')
@@ -313,11 +315,9 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                         print(f"  Missing time or displacement data for LVDT {lvdt_idx+1}")
                 
                 if plotted_lvdt:
-                    # Add vertical lines for pre-trigger and post-trigger times
+                    # Add vertical line for pretrigger
                     ax.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5,
                              label=f'Event Start ({pre_trigger_time:.1f}s)')
-                    ax.axvline(x=post_trigger_time, color='purple', linestyle='--', alpha=0.5,
-                             label=f'Post-trigger Start ({post_trigger_time:.1f}s)')
                     
                     ax.set_xlabel('Time (s)')
                     ax.set_ylabel('Displacement (mm)')

@@ -45,7 +45,7 @@ class DummyAnalogIn:
         elapsed_time = current_time - self.cycle_start_time
         phase_shift = self.channel * (math.pi / 4)  # Adjust phase shift for each channel
         displacement = self.amplitude * math.sin(2 * math.pi * self.frequency * elapsed_time + phase_shift)
-        noise = np.random.normal(0, 0.25)  # Increased noise for variability
+        noise = np.random.normal(0, 0.1)  # Gaussian noise with std dev 0.1mm
         displacement += noise
         return displacement
 
@@ -78,9 +78,9 @@ class DummyMPU6050:
         """Simulate accelerometer data with valid values."""
         t = time.time() - self._cycle_start_time
         return {
-            'x': 0.55 * math.sin(t * 2 * math.pi),  # Increased amplitude
-            'y': 0.55 * math.cos(t * 2 * math.pi),
-            'z': 9.81 + 0.55 * math.sin(t * 2 * math.pi)
+                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
+                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
+                'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
         }
 
         
@@ -105,7 +105,9 @@ class SimulatorConfig:
         pre_trigger_time=2.0,
         post_trigger_time=5.0,
         min_event_duration=1.0,
+        verbose=False,  # Add verbosity flag
     ):
+        self.verbose = verbose  # Store verbosity setting
         # Configuración de directorios y archivos
         self.output_dir = output_dir or os.path.join("repository", datetime.now().strftime("%Y%m%d"))
         os.makedirs(self.output_dir, exist_ok=True)
@@ -199,6 +201,22 @@ class SimulatorConfig:
         for i in range(self.num_accelerometers):
             mpu_list.append(DummyMPU6050(0x68 + i))
         return mpu_list
+
+    def process_lvdt_data(self, lvdt_data):
+        """Process LVDT data with optional verbosity."""
+        if self.verbose:
+            print(f"Processing LVDT data: {len(lvdt_data)} samples.")
+        
+        # Placeholder for actual LVDT data processing logic
+        processed_data = []  # Example: Store processed results here
+        for sample in lvdt_data:
+            # ...process each sample (e.g., filtering, scaling, etc.)...
+            processed_data.append(sample)  # Replace with actual processing logic
+        
+        if self.verbose:
+            print(f"Processed {len(processed_data)} LVDT samples.")
+        
+        return processed_data
 
 
 # Utilidades simuladas (similar a configurator, pero dummy)
