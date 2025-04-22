@@ -135,7 +135,8 @@ def save_event_data(event_data, start_time, config, event_folder=None, displacem
         traceback.print_exc()
         return None
 
-def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_file=None, lvdt_file=None):
+def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_file=None, lvdt_file=None,
+                           event_start_time=0.0, event_end_time=0.0):
     """Generate comprehensive event analysis with reports and visualizations."""
     try:
         # Calculate statistics for accelerometer data
@@ -169,8 +170,16 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
             # Generate plots
             analysis_plot = os.path.join(event_folder, f"analysis_{timestamp_str}.png")
             create_analysis_plots(
-                np_data, freqs, fft_x, fft_y, fft_z,
-                timestamp_str, analysis_plot, config
+                np_data,
+                freqs,
+                fft_x,
+                fft_y,
+                fft_z,
+                timestamp_str,
+                analysis_plot,
+                config,
+                event_start_time,
+                event_end_time
             )
 
             # Generate report
@@ -214,7 +223,9 @@ def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
     peaks.sort(reverse=True)
     return [freq for _, freq in peaks[:n_peaks]]
 
-def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, filename, config):
+def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
+                          timestamp_str, filename, config, 
+                          event_start_time, event_end_time):
     """Create time series and FFT analysis plots for all sensors."""
     try:
         if 'timestamps' not in np_data or len(np_data['timestamps']) == 0:
@@ -223,8 +234,10 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
              
         t_main = np_data['timestamps']
         total_duration = t_main[-1] if len(t_main) > 0 else 0.0
-        pre_event_time = getattr(config, 'pre_event_time', 5.0)
-        post_event_time = getattr(config, 'post_event_time', 15.0)
+        
+        # Compute the actual event boundaries within the recorded data.
+        actual_event_start = config.pre_event_time
+        actual_event_end = total_duration - config.post_event_time
         
         # Plot each accelerometer separately
         for accel_idx in range(config.num_accelerometers):
@@ -242,9 +255,9 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
                 
-                # Líneas verticales para trigger y postrigger
-                ax_time.axvline(x=pre_event_time, color='k', linestyle='--', alpha=0.7, label='Pre-Event')
-                ax_time.axvline(x=total_duration - post_event_time, color='m', linestyle='--', alpha=0.7, label='Post-Event')
+                # Draw vertical lines at the actual event boundaries 
+                ax_time.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
+                ax_time.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='Event End')
 
                 # Líneas horizontales para thresholds de trigger y detrigger (aceleraciones)
                 if hasattr(config, 'trigger_acceleration_threshold'):
@@ -323,9 +336,9 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                         print(f"  Missing time or displacement data for LVDT {lvdt_idx+1}")
                 
                 if plotted_lvdt:
-                    # Líneas verticales para trigger y postrigger (ubicación corregida)
-                    ax.axvline(x=pre_event_time, color='k', linestyle='--', alpha=0.7, label='Pre-Event')
-                    ax.axvline(x=total_duration - post_event_time, color='m', linestyle='--', alpha=0.7, label='Post-Event')
+                    # Draw vertical lines at the actual event boundaries 
+                    ax.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
+                    ax.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='Event End')
 
                     # Líneas horizontales para thresholds de trigger y detrigger (desplazamientos)
                     if hasattr(config, 'trigger_displacement_threshold'):
