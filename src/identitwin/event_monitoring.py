@@ -163,7 +163,7 @@ class EventMonitor:
             return False
 
     def _handle_event_recording(self, sensor_data, current_time):
-        """Handle ongoing event recording and check for completion"""
+        """Handle ongoing event recording and check for completion."""
         try:
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
@@ -174,10 +174,12 @@ class EventMonitor:
                 
                 if event_duration >= min_duration:
                     try:
+                        # Save event data only after the event has fully completed
                         self.event_data_buffer.put(self.current_event_data)
-                        self.event_count_ref[0] += 1
                         event_time = self.current_event_data[0]["timestamp"]
                         self._save_event_data(self.current_event_data, event_time)
+                        self.event_count_ref[0] += 1  # Increment event count here
+                        state.set_event_variable("event_count", self.event_count_ref[0])
                         print(f"Event complete - duration={event_duration:.2f}s")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
