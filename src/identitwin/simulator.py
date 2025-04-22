@@ -28,10 +28,11 @@ class DummyADS:
         self.gain = None
 
 class DummyAnalogIn:
-    def __init__(self, ads, channel, slope=19.86):
+    def __init__(self, ads, channel, slope=19.86, intercept=0.0):
         self.ads = ads
         self.channel = channel
         self.slope = slope
+        self.intercept = intercept
         self._raw_value = 0  # Internal state for raw value
         self.last_voltage = 0.0
         self.cycle_start_time = time.time()
@@ -62,6 +63,11 @@ class DummyAnalogIn:
         voltage = (self._raw_value * 0.1875) / 1000.0
         self.last_voltage = voltage
         return voltage
+
+    def elongation(self):
+        """Calculates elongation based on the simulated voltage."""
+        voltage = self.voltage
+        return self.slope * voltage + self.intercept
 
 class DummyMPU6050:
     def __init__(self, addr):
