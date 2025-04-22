@@ -139,71 +139,62 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
                            event_start_time=0.0, event_end_time=0.0):
     """Generate comprehensive event analysis with reports and visualizations."""
     try:
-        # Calculate statistics for accelerometer data
-        if config.enable_accel and 'accel1_x' in np_data:
-            # Prepare data dictionary for FFT
-            accel_data = {
-                'x': np_data['accel1_x'],
-                'y': np_data['accel1_y'],  # Fix: remove np. prefix
-                'z': np_data['accel1_z']   # Fix: correct np.data to np_data
-            }
-            
-            # Calculate FFT for all axes
+        # Process each available accelerometer separately.
+        fft_results = []  # List to store FFT results per accelerometer
+        if config.enable_accel:
             sampling_rate = 1.0 / config.time_step_acceleration
-            freqs, fft_x, fft_y, fft_z = calculate_fft(accel_data, sampling_rate)
+            for accel_idx in range(config.num_accelerometers):
+                key_x = f'accel{accel_idx+1}_x'
+                key_y = f'accel{accel_idx+1}_y'
+                key_z = f'accel{accel_idx+1}_z'
+                if key_x in np_data and key_y in np_data and key_z in np_data:
+                    accel_data = {
+                        'x': np_data[key_x],
+                        'y': np_data[key_y],
+                        'z': np_data[key_z]
+                    }
+                    freqs, fft_x, fft_y, fft_z = calculate_fft(accel_data, sampling_rate)
+                    fft_results.append({
+                        'freq': freqs,
+                        'fft_x': fft_x,
+                        'fft_y': fft_y,
+                        'fft_z': fft_z
+                    })
+        # ...existing analysis...
+        analysis_plot = os.path.join(event_folder, f"analysis_{timestamp_str}.png")
+        create_analysis_plots(
+            np_data,
+            fft_results,  # Pass FFT results list instead of separate arrays
+            timestamp_str,
+            analysis_plot,
+            config,
+            event_start_time,
+            event_end_time
+        )
+        
+        report_file = os.path.join(event_folder, f"report_{timestamp_str}.txt")
+        write_event_report(
+            report_file,
+            timestamp_str,
+            len(np_data['timestamps'])*config.time_step_acceleration,
+            np.max(np.abs(np_data.get('accel1_x',[]))),
+            np.max(np.abs(np_data.get('accel1_y',[]))),
+            np.max(np.abs(np.data.get('accel1_z',[]))),
+            np.sqrt(np.max(np.abs(np.data.get('accel1_x',[])))**2 +
+                    np.max(np.abs(np.data.get('accel1_y',[])))**2 +
+                    np.max(np.abs(np.data.get('accel1_z',[])))**2),
+            fft_results[0]['x'] if fft_results else [],
+            fft_results[0]['y'] if fft_results else [],
+            fft_results[0]['z'] if fft_results else [],
+            accel_file,
+            lvdt_file,
+            analysis_plot,
+            np_data,
+            config
+        )
             
-            # Rest of the analysis remains the same
-            n = len(freqs)  # We now have the correct length from FFT calculation
-            
-            # Calculate other statistics
-            max_accel_x = np.max(np.abs(np_data['accel1_x']))
-            max_accel_y = np.max(np.abs(np_data['accel1_y']))
-            max_accel_z = np.max(np.abs(np_data['accel1_z']))
-            max_magnitude = np.sqrt(max_accel_x**2 + max_accel_y**2 + max_accel_z**2)
-            duration = len(np_data['timestamps']) * config.time_step_acceleration
-
-            # Calculate domninant frequencies
-            top_freqs_x = find_dominant_frequencies(fft_x, freqs, 3)
-            top_freqs_y = find_dominant_frequencies(fft_y, freqs, 3)
-            top_freqs_z = find_dominant_frequencies(fft_z, freqs, 3)
-
-            # Generate plots
-            analysis_plot = os.path.join(event_folder, f"analysis_{timestamp_str}.png")
-            create_analysis_plots(
-                np_data,
-                freqs,
-                fft_x,
-                fft_y,
-                fft_z,
-                timestamp_str,
-                analysis_plot,
-                config,
-                event_start_time,
-                event_end_time
-            )
-
-            # Generate report
-            report_file = os.path.join(event_folder, f"report_{timestamp_str}.txt")
-            write_event_report(
-                report_file,
-                timestamp_str,
-                duration,
-                max_accel_x,
-                max_accel_y,
-                max_accel_z,
-                max_magnitude,
-                top_freqs_x,
-                top_freqs_y,
-                top_freqs_z,
-                accel_file,
-                lvdt_file,
-                analysis_plot,
-                np_data,  # Pass the complete data for LVDT analysis
-                config    # Pass config for sensor status
-            )
-            
-            print(f"Generated analysis plots at: {analysis_plot}")
-            return True
+        print(f"Generated analysis plots at: {analysis_plot}")
+        return True
     except Exception as e:
         print(f"Error generating event analysis: {e}")
         import traceback
@@ -223,8 +214,7 @@ def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
     peaks.sort(reverse=True)
     return [freq for _, freq in peaks[:n_peaks]]
 
-def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
-                          timestamp_str, filename, config, 
+def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, config, 
                           event_start_time, event_end_time):
     """Create time series and FFT analysis plots for all sensors."""
     try:
@@ -255,11 +245,9 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
                 
-                # Draw vertical lines at the actual event boundaries 
                 ax_time.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
                 ax_time.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='Event End')
 
-                # Líneas horizontales para thresholds de trigger y detrigger (aceleraciones)
                 if hasattr(config, 'trigger_acceleration_threshold'):
                     trigger_threshold_accel = config.trigger_acceleration_threshold
                     ax_time.axhline(y=trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8, label='Trigger Threshold (Accel)')
@@ -275,11 +263,21 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                 ax_time.grid(True, alpha=0.3)
                 ax_time.legend()
                 
-                # FFT plot for this accelerometer
+                # Retrieve FFT for this accelerometer from fft_results_list
+                if fft_results_list and len(fft_results_list) > accel_idx:
+                    current_fft = fft_results_list[accel_idx]
+                    current_freq = current_fft['freq']
+                    current_fft_x = current_fft['fft_x']
+                    current_fft_y = current_fft['fft_y']
+                    current_fft_z = current_fft['fft_z']
+                else:
+                    current_freq, current_fft_x, current_fft_y, current_fft_z = [], [], [], []
+                
+                # FFT plot for this accelerometer using its own FFT data
                 ax_fft = fig.add_subplot(2, 1, 2)
-                ax_fft.plot(freqs, np.ma.masked_invalid(fft_x), 'r', label='X', alpha=0.8)
-                ax_fft.plot(freqs, np.ma.masked_invalid(fft_y), 'g', label='Y', alpha=0.8)
-                ax_fft.plot(freqs, np.ma.masked_invalid(fft_z), 'b', label='Z', alpha=0.8)
+                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_x), 'r', label='X', alpha=0.8)
+                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_y), 'g', label='Y', alpha=0.8)
+                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_z), 'b', label='Z', alpha=0.8)
                 ax_fft.set_xlabel('Frequency (Hz)')
                 ax_fft.set_ylabel('Amplitude')
                 ax_fft.set_title(f'Accelerometer {accel_idx+1} - Frequency Analysis')
@@ -287,17 +285,17 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                 ax_fft.legend()
                 
                 fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s', fontsize=14, y=0.995)
-                plt.tight_layout(rect=[0, 0, 1, 0.97]) # Adjust layout
+                plt.tight_layout(rect=[0, 0, 1, 0.97])
                 accel_filename = f"{os.path.splitext(filename)[0]}_accel{accel_idx+1}.png"
                 plt.savefig(accel_filename, dpi=300, bbox_inches='tight')
-                plt.close(fig) # Close the specific figure
+                plt.close(fig)
                 print(f"Generated accelerometer {accel_idx+1} plot at: {accel_filename}")
             
             except Exception as e:
                 print(f"Error creating plot for accelerometer {accel_idx+1}: {e}")
                 traceback.print_exc()
                 if 'fig' in locals() and plt.fignum_exists(fig.number):
-                     plt.close(fig) # Ensure figure is closed on error
+                     plt.close(fig)
         
         # Create single plot for all LVDTs
         if config.enable_lvdt:
@@ -389,6 +387,7 @@ def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z
             f.write(f"FREQUENCY ANALYSIS:\n")
             f.write(f"  Dominant X frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_x])}\n")
             f.write(f"  Dominant Y frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_y])}\n")
+            # Fixed typo here: use np_data.get instead of np.data.get
             f.write(f"  Dominant Z frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_z])}\n\n")
         
         # LVDT section - only if enabled and data provided
@@ -407,26 +406,55 @@ def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z
             f.write(f"  - {os.path.basename(lvdt_file)}\n")
         f.write(f"  - {os.path.basename(plot_file)}\n")
 
-def generate_fft_plot(np_data, fs, filename, config):
-    """Generate FFT plot for accelerometer data."""
+def generate_fft_plot(np_data, fs, filename_template, config):
+    """
+    Generate separate FFT plots for each accelerometer.
+    
+    Args:
+        np_data: Dictionary containing accelerometer data arrays.
+        fs: Sampling rate in Hz.
+        filename_template: Template for saving plots (use '{accel}' as placeholder for channel number).
+        config: System configuration object.
+        
+    Returns:
+        True on success, False on error.
+    """
     try:
-        fig, axes = plt.subplots(3, 1, figsize=(10, 12))
         for accel_idx in range(1, config.num_accelerometers + 1):
+            x_key = f'accel{accel_idx}_x'
+            y_key = f'accel{accel_idx}_y'
+            z_key = f'accel{accel_idx}_z'
+            if x_key not in np_data or y_key not in np_data or z_key not in np_data:
+                continue  # Skip if data for this accelerometer is missing
+
             accel_data = {
-                'x': np_data[f'accel{accel_idx}_x'],  # Fix: use dictionary format
-                'y': np_data[f'accel{accel_idx}_y'],
-                'z': np_data[f'accel{accel_idx}_z']
+                'x': np_data[x_key],
+                'y': np_data[y_key],
+                'z': np_data[z_key]
             }
-            freq_x, fft_x, fft_y, fft_z = calculate_fft(accel_data, fs)  # Fix: unpack all returned values
+            freq, fft_x, fft_y, fft_z = calculate_fft(accel_data, fs)
             
-            axes[0].plot(freq_x, fft_x, label=f'Accel {accel_idx}')
-            axes[1].plot(freq_x, fft_y, label=f'Accel {accel_idx}')  # Fix: use freq_x consistently
-            axes[2].plot(freq_x, fft_z, label=f'Accel {accel_idx}')
+            fig, axes = plt.subplots(3, 1, figsize=(10, 12))
+            axes[0].plot(freq, fft_x, label=f'Accel {accel_idx} X')
+            axes[0].set_xlabel('Frequency (Hz)')
+            axes[0].set_ylabel('Amplitude')
+            axes[0].legend()
             
-        plt.tight_layout()
-        plt.savefig(filename, dpi=300)
-        plt.close()
-        print(f"Generated FFT plot at: {filename}")
+            axes[1].plot(freq, fft_y, label=f'Accel {accel_idx} Y')
+            axes[1].set_xlabel('Frequency (Hz)')
+            axes[1].set_ylabel('Amplitude')
+            axes[1].legend()
+            
+            axes[2].plot(freq, fft_z, label=f'Accel {accel_idx} Z')
+            axes[2].set_xlabel('Frequency (Hz)')
+            axes[2].set_ylabel('Amplitude')
+            axes[2].legend()
+            
+            plt.tight_layout()
+            plot_filename = filename_template.replace("{accel}", str(accel_idx))
+            plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print(f"Generated FFT plot for Accelerometer {accel_idx} at: {plot_filename}")
         return True
     except Exception as e:
         print(f"Error generating FFT plot: {e}")

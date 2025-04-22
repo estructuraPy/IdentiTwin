@@ -24,7 +24,7 @@ import csv
 import os
 import numpy as np
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def initialize_general_csv(num_lvdts, num_accelerometers, filename='general_measurements.csv'):
     """Initialize a CSV file for storing both LVDT and accelerometer data."""
@@ -211,14 +211,14 @@ def create_displacement_csv(event_data, event_folder, config):
                 header.extend([f'LVDT{i+1}_Voltage', f'LVDT{i+1}_Displacement'])
             writer.writerow(header)
             
-            # Get start time from first entry
-            start_time = event_data[0]["timestamp"]
+            # Correct start time to cover pre-event period.
+            start_time = event_data[0]["timestamp"] - timedelta(seconds=config.pre_event_time)
             
-            # Write data
-            for i, data in enumerate(event_data):
+            # Write data: use elapsed seconds from corrected start_time
+            for data in event_data:
                 if "lvdt_data" in data["sensor_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    expected_time = i * (1.0 / config.sampling_rate_lvdt)
+                    expected_time = (data["timestamp"] - start_time).total_seconds()
                     row = [timestamp, f"{expected_time:.6f}"]
                     for lvdt in data["sensor_data"]["lvdt_data"]:
                         row.extend([f"{lvdt['voltage']:.6f}", f"{lvdt['displacement']:.6f}"])
@@ -244,14 +244,14 @@ def create_acceleration_csv(event_data, event_folder, config):
                 header.extend([f'Accel{i+1}_X', f'Accel{i+1}_Y', f'Accel{i+1}_Z', f'Accel{i+1}_Magnitude'])
             writer.writerow(header)
             
-            # Get start time from first entry
-            start_time = event_data[0]["timestamp"]
+            # Correct start time to cover pre-event period.
+            start_time = event_data[0]["timestamp"] - timedelta(seconds=config.pre_event_time)
             
-            # Write data - similar to displacement CSV logic
-            for i, data in enumerate(event_data):
+            # Write data: compute expected_time as elapsed seconds from corrected start_time
+            for data in event_data:
                 if "accel_data" in data["sensor_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    expected_time = i * (1.0 / config.sampling_rate_acceleration)
+                    expected_time = (data["timestamp"] - start_time).total_seconds()
                     row = [timestamp, f"{expected_time:.6f}"]
                     for accel in data["sensor_data"]["accel_data"]:
                         magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)

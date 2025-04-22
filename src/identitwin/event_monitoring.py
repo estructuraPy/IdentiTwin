@@ -259,30 +259,21 @@ class EventMonitor:
     def _save_event_data(self, event_data, start_time):
         """Save event data to CSV file and generate plots."""
         try:
-            # Initialize tracking variables
             seen_timestamps = set()
             processed_data = []
-            sample_count = 0
-            
-            # Process each data point
+            # For each data point, compute expected_time as the difference from the first sample’s timestamp
             for data in event_data:
                 if 'timestamp' not in data:
                     continue
-                    
                 if data['timestamp'] not in seen_timestamps:
                     seen_timestamps.add(data['timestamp'])
-                    
-                    # Add expected time based on sample number
-                    expected_time = sample_count * (1.0 / self.config.sampling_rate_acceleration)
+                    expected_time = (data["timestamp"] - event_data[0]["timestamp"]).total_seconds()
                     data['expected_time'] = expected_time
                     processed_data.append(data)
-                    sample_count += 1
-
             if not processed_data:
                 logging.error("No valid data to save")
                 return False
 
-            # Save processed data
             report_file = processing_analysis.save_event_data(
                 event_data=processed_data,
                 start_time=start_time,
