@@ -35,6 +35,7 @@ from collections import deque
 from datetime import datetime
 import logging
 import queue
+import matplotlib.pyplot as plt  # Add this import for cleanup
 
 from . import state
 from . import processing_data, processing_analysis
@@ -709,3 +710,13 @@ class MonitoringSystem:
             return f"{minutes}m {seconds}s"
         else:
             return f"{seconds}s"
+
+def process_accelerometer_data(data, offsets, scaling_factor):
+    """Process accelerometer data."""
+    try:
+        data["x"] = (data["x"] + offsets["x"]) * scaling_factor
+        data["y"] = (data["y"] + offsets["y"]) * scaling_factor
+        data["z"] = (data["z"] + offsets["z"]) * scaling_factor
+    except Exception as e:
+        print(f"Warning: Error processing accelerometer data: {e}")
+        data["x"], data["y"], data["z"] = 0.0, 0.0, 0.0  # Reset to default values

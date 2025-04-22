@@ -15,6 +15,7 @@ import traceback
 from datetime import datetime
 import numpy as np
 import matplotlib
+import importlib  # Add importlib to dynamically load modules
 
 # Ensure TkAgg backend is used, falling back to QtAgg if necessary.
 try:
@@ -405,23 +406,32 @@ def main():
     enable_accel_plots = False
     enable_fft_plots = False
 
+    # Dynamically load the appropriate configuration module
+    config_module_name = "identitwin.simulator" if args.simulation else "identitwin.configurator"
+    config_module = importlib.import_module(config_module_name)
+    SystemConfig = config_module.SimulatorConfig if args.simulation else config_module.SystemConfig
+
     print("\n======================== Identitwin Monitoring System =========================\n")
+    print(f"Operation Mode: {'Simulation' if args.simulation else 'Hardware'}")
 
-    # Simulation mode overrides
-    if args.simulation:
-        original_init = configurator.SystemConfig.__init__
-
-        def new_init(self, *a, **kw):
-            """Overrides SystemConfig's init to inject simulated sensor creators."""
-            original_init(self, *a, **kw)
-            self.create_ads1115 = simulated_create_ads1115.__get__(self, configurator.SystemConfig)
-            self.create_lvdt_channels = simulated_create_lvdt_channels.__get__(self, configurator.SystemConfig)
-            self.create_accelerometers = simulated_create_accelerometers.__get__(self, configurator.SystemConfig)
-
-        configurator.SystemConfig.__init__ = new_init
-        print("Simulation mode enabled: Using simulated sensors.")
-    else:
-        print("Real hardware mode enabled.")
+    config = SystemConfig(
+        enable_lvdt=enable_lvdt,
+        enable_accel=enable_accel,
+        sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
+        sampling_rate_lvdt=LVDT_SAMPLING_RATE,
+        plot_refresh_rate=PLOT_REFRESH_RATE,
+        output_dir=args.output_dir,
+        num_lvdts=NUM_LVDTS,
+        num_accelerometers=NUM_ACCELS,
+        gpio_pins=None,
+        trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
+        detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
+        trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
+        detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
+        pre_trigger_time=PRE_TRIGGER_TIME,
+        post_trigger_time=POST_TRIGGER_TIME,
+        min_event_duration=MIN_EVENT_DURATION
+    )
 
     print(f"Operation: {get_operation_mode_name()}")
     print("\nSensor Configuration:")
@@ -441,8 +451,6 @@ def main():
     print(f"  - Pre-Trigger Buffer: {PRE_TRIGGER_TIME} seconds")
     print(f"  - Post-Trigger Buffer: {POST_TRIGGER_TIME} seconds")
     print(f"  - Minimum Event Duration: {MIN_EVENT_DURATION} seconds")
-
-    config = create_system_config()
 
     if args.output_dir:
         config.output_dir = args.output_dir
@@ -539,4 +547,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-    
