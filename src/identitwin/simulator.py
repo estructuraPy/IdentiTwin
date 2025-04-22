@@ -7,30 +7,77 @@ import os
 import platform
 from datetime import datetime
 import time
+import math
 import numpy as np
 
 # Clases dummy para simular hardware
 class DummyLED:
+    def __init__(self, verbose=False):  # Default verbosity to False
+        self.verbose = verbose  # Control whether messages are printed
+
     def off(self):
-        print("DummyLED off")
+        if self.verbose:
+            print("DummyLED off")
+
+    def toggle(self):
+        if self.verbose:
+            print("DummyLED toggled")  # Simulate toggling the LED
 
 class DummyADS:
     def __init__(self):
         self.gain = None
 
 class DummyAnalogIn:
-    def __init__(self, ads, channel):
+    def __init__(self, ads, channel, slope=19.86):
         self.ads = ads
         self.channel = channel
-    def read(self):
-        return 0  # valor simulado
+        self.slope = slope
+        self._raw_value = 0  # Internal state for raw value
+        self.last_voltage = 0.0
+        self.cycle_start_time = time.time()
+        self.amplitude = 5.0  # mm
+        self.frequency = 0.1  # Hz
+
+    def _calculate_displacement(self):
+        """Calculates the simulated displacement."""
+        current_time = time.time()
+        elapsed_time = current_time - self.cycle_start_time
+        phase_shift = self.channel * (math.pi / 4)  # Adjust phase shift for each channel
+        displacement = self.amplitude * math.sin(2 * math.pi * self.frequency * elapsed_time + phase_shift)
+        noise = np.random.normal(0, 0.1)  # Gaussian noise with std dev 0.1mm
+        displacement += noise
+        return displacement
+
+    def _update_raw_value(self):
+        """Updates the internal raw value based on simulated displacement."""
+        displacement = self._calculate_displacement()
+        voltage = displacement / self.slope if self.slope != 0 else 0.0
+        simulated_raw = int((voltage * 1000.0) / 0.1875)
+        self._raw_value = max(-32768, min(simulated_raw, 32767))
+
+    @property
+    def voltage(self):
+        """Calculates voltage from the simulated raw value."""
+        self._update_raw_value()  # Ensure raw value is current
+        voltage = (self._raw_value * 0.1875) / 1000.0
+        self.last_voltage = voltage
+        return voltage
 
 class DummyMPU6050:
     def __init__(self, addr):
         self.addr = addr
-    def get_accel_data(self):
-        return {"x": 0, "y": 0, "z": 0}
+        self._cycle_start_time = time.time()
 
+    def get_accel_data(self):
+        """Simulate accelerometer data with valid values."""
+        t = time.time() - self._cycle_start_time
+        return {
+                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
+                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
+                'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
+        }
+
+        
 # Clase de configuración simulada
 class SimulatorConfig:
     """Configuration class for simulation mode."""

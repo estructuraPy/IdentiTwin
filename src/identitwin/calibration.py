@@ -145,6 +145,16 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     return offsets
 
 
+def calibrate_accelerometer(data, offsets):
+    """Calibrate accelerometer data."""
+    magnitude = np.sqrt(data["x"]**2 + data["y"]**2 + data["z"]**2)
+    if magnitude == 0:
+        print("Warning: Accelerometer magnitude is zero. Skipping scaling factor calculation.")
+        scaling_factor = 1.0  # Default scaling factor to avoid division by zero
+    else:
+        scaling_factor = GRAVITY / magnitude
+
+
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
     """
     Saves calibration data to a master calibration file, appending new data to the existing file.
