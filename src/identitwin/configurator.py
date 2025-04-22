@@ -239,7 +239,9 @@ class SystemConfig:
             channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
             for i in range(self.num_lvdts):
                 ch = channel_map[i % len(channel_map)]
-                channels.append(AnalogIn(ads, ch))
+                channel = AnalogIn(ads, ch)
+                channel.voltage = lambda: channel.voltage  # Ensure compatibility
+                channels.append(channel)
             return channels
         except Exception as e:
             print(f"Error creating LVDT channels: {e}")
