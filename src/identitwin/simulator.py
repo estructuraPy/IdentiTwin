@@ -202,21 +202,9 @@ class SimulatorConfig:
             mpu_list.append(DummyMPU6050(0x68 + i))
         return mpu_list
 
-    def process_lvdt_data(self, lvdt_data):
-        """Process LVDT data with optional verbosity."""
-        if self.verbose:
-            print(f"Processing LVDT data: {len(lvdt_data)} samples.")
-        
-        # Placeholder for actual LVDT data processing logic
-        processed_data = []  # Example: Store processed results here
-        for sample in lvdt_data:
-            # ...process each sample (e.g., filtering, scaling, etc.)...
-            processed_data.append(sample)  # Replace with actual processing logic
-        
-        if self.verbose:
-            print(f"Processed {len(processed_data)} LVDT samples.")
-        
-        return processed_data
+    def process_lvdt_data(self, lvdt_data, lvdt_index=None):
+        """Process LVDT data without any logging."""
+        return lvdt_data  # Return data directly without any logging
 
 
 # Utilidades simuladas (similar a configurator, pero dummy)
