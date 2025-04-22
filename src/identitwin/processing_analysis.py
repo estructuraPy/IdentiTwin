@@ -301,7 +301,6 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
         
         # Create single plot for all LVDTs
         if config.enable_lvdt:
-            print("Attempting to plot LVDTs...") # Debug print
             try:
                 fig = plt.figure(figsize=(12, 6))
                 ax = fig.add_subplot(111)
@@ -312,17 +311,11 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                     time_key = f'lvdt{lvdt_idx+1}_time'
                     disp_key = f'lvdt{lvdt_idx+1}_displacement'
                     
-                    print(f"Checking LVDT {lvdt_idx+1} data...")
-                    
                     if time_key in np_data and disp_key in np_data:
                         lvdt_times = np_data[time_key]
                         lvdt_data = np_data[disp_key]
                         
                         if len(lvdt_times) > 0:
-                            print(f"  Plotting {len(lvdt_times)} points for LVDT {lvdt_idx+1}")
-                            print(f"  First time: {lvdt_times[0]:.3f}s, Last time: {lvdt_times[-1]:.3f}s")
-                            print(f"  Data range: {np.min(lvdt_data):.3f}mm to {np.max(lvdt_data):.3f}mm")
-                            
                             ax.plot(lvdt_times, lvdt_data, 
                                    label=f'LVDT {lvdt_idx+1}',
                                    marker='.',        # Add markers
@@ -330,11 +323,7 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                                    linestyle='-',     # Solid line between points
                                    alpha=0.8)         # Slight transparency
                             plotted_lvdt = True
-                        else:
-                            print(f"  No valid data points for LVDT {lvdt_idx+1}")
-                    else:
-                        print(f"  Missing time or displacement data for LVDT {lvdt_idx+1}")
-                
+                        
                 if plotted_lvdt:
                     # Draw vertical lines at the actual event boundaries 
                     ax.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
@@ -362,19 +351,14 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z,
                     
                     lvdt_filename = f"{os.path.splitext(filename)[0]}_lvdt_all.png"
                     plt.savefig(lvdt_filename, dpi=300, bbox_inches='tight')
-                    print(f"Generated combined LVDT plot: {lvdt_filename}")
-                else:
-                    print("No LVDT data was plotted.")
                     
                 plt.close(fig)
                 
             except Exception as e:
-                print(f"Error creating LVDT plot: {e}")
+                logging.error(f"Error creating LVDT plot: {e}")
                 traceback.print_exc()
                 if 'fig' in locals() and plt.fignum_exists(fig.number):
                     plt.close(fig)
-        else:
-            print("LVDT plotting disabled in config.")
         
         return True
         

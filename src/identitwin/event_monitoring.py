@@ -174,10 +174,30 @@ class EventMonitor:
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
             
-            # Check if post-trigger duration has passed since the *last* trigger time
+            # Check if post-trigger duration has passed since the last trigger time
             if current_time - self.last_trigger_time > post_trigger_time:
-                # Calculate duration based on the number of samples *after* the pre-trigger part
-                # The pre-trigger part's length is self.pre_trigger_buffer.maxlen
+                # Wait a short fixed duration (e.g., 0.5 seconds) to capture additional post-event data
+                wait_duration = 0.5
+                print(f"Post-event period met; waiting an extra {wait_duration:.1f} seconds for post-event data...")
+                time.sleep(wait_duration)
+                
+                # Drain any additional samples from the queue collected during the extra wait,
+                # provided their timestamp is within the wait_period from the last recorded sample.
+                if self.current_event_data:
+                    last_timestamp = self.current_event_data[-1]["timestamp"]
+                    while len(self.data_queue) > 0:
+                        next_data = self.data_queue.popleft()
+                        # Calculate time difference using total_seconds()
+                        time_diff = (next_data["timestamp"] - last_timestamp).total_seconds()
+                        if time_diff < wait_duration:
+                            self.current_event_data.append(next_data)
+                            last_timestamp = next_data["timestamp"]
+                        else:
+                            # If sample is too far out, push it back and break
+                            self.data_queue.appendleft(next_data)
+                            break
+                
+                # Finalize event recording
                 event_samples = len(self.current_event_data) - self.pre_trigger_buffer.maxlen
                 event_duration = event_samples * self.config.time_step_acceleration
                 min_duration = self.thresholds.get("min_event_duration", 2.0)
@@ -185,22 +205,18 @@ class EventMonitor:
                 if event_duration >= min_duration:
                     try:
                         print(f"Finalizing event with {len(self.current_event_data)} total samples")
-                        # Make a deep copy to ensure we don't lose data during processing
                         complete_event_data = list(self.current_event_data)
-                        self.event_data_buffer.put(complete_event_data)
-                        # Use the timestamp of the *first* data point (start of pre-trigger)
-                        event_time = complete_event_data[0]["timestamp"] 
+                        event_time = complete_event_data[0]["timestamp"]
                         self._save_event_data(complete_event_data, event_time)
                         self.event_count_ref[0] += 1
                         state.set_event_variable("event_count", self.event_count_ref[0])
-                        # Calculate total duration including pre-trigger
                         total_recorded_duration = len(complete_event_data) * self.config.time_step_acceleration
-                        print(f"Event complete - total duration={total_recorded_duration:.2f}s (including pre/post trigger)")
+                        print(f"Event complete - total duration={total_recorded_duration:.2f}s (including pre/post event data)")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
-                        traceback.print_exc()  # Add traceback to debug the issue
+                        traceback.print_exc()
                 else:
-                     print(f"Event too short ({event_duration:.2f}s), discarding.")
+                    print(f"Event too short ({event_duration:.2f}s), discarding.")
 
                 # Reset event state regardless of duration check
                 self.in_event_recording = False
@@ -209,10 +225,9 @@ class EventMonitor:
                 state.set_event_variable("is_event_recording", False)
             
             return True
-            
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
-            traceback.print_exc()  # Add traceback for better debugging
+            traceback.print_exc()
             return False
 
     def event_monitoring_thread(self):
