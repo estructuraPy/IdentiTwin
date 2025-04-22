@@ -235,12 +235,11 @@ class SystemConfig:
         """Create LVDT channels using the provided ADS1115 object."""
         try:
             channels = []
-            channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]  # ADS1115 has 4 channels
+            # Ciclar entre los canales disponibles para soportar cualquier número de LVDTs
+            channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
             for i in range(self.num_lvdts):
-                if i < len(channel_map):
-                    channels.append(AnalogIn(ads, channel_map[i]))
-                else:
-                    channels.append(AnalogIn(ads, channel_map[-1]))
+                ch = channel_map[i % len(channel_map)]
+                channels.append(AnalogIn(ads, ch))
             return channels
         except Exception as e:
             print(f"Error creating LVDT channels: {e}")
