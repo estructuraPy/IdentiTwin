@@ -45,7 +45,7 @@ class DummyAnalogIn:
         elapsed_time = current_time - self.cycle_start_time
         phase_shift = self.channel * (math.pi / 4)  # Adjust phase shift for each channel
         displacement = self.amplitude * math.sin(2 * math.pi * self.frequency * elapsed_time + phase_shift)
-        noise = np.random.normal(0, 0.1)  # Gaussian noise with std dev 0.1mm
+        noise = np.random.normal(0, 0.25)  # Increased noise for variability
         displacement += noise
         return displacement
 
@@ -78,9 +78,9 @@ class DummyMPU6050:
         """Simulate accelerometer data with valid values."""
         t = time.time() - self._cycle_start_time
         return {
-                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
-                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
-                'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
+            'x': 0.55 * math.sin(t * 2 * math.pi),  # Increased amplitude
+            'y': 0.55 * math.cos(t * 2 * math.pi),
+            'z': 9.81 + 0.55 * math.sin(t * 2 * math.pi)
         }
 
         

@@ -103,14 +103,17 @@ def extract_data_from_event(event_data, start_time, config):
     """Extract numerical data from event_data structure for analysis."""
     np_data = {}
     
-    # Extract timestamps
+    # Extract timestamps and validate data completeness
     timestamps = []
+    valid_data_points = []
+    
     for data in event_data:
         if "timestamp" in data and isinstance(data["timestamp"], datetime):
-             timestamps.append(data["timestamp"])
+            timestamps.append(data["timestamp"])
+            valid_data_points.append(data)
         else:
-             logging.warning(f"Missing or invalid timestamp in event data entry: {data}")
-             continue
+            logging.warning(f"Missing or invalid timestamp in event data entry: {data}")
+            continue
     
     if not timestamps:
         logging.error("No valid timestamps found in event data.")
@@ -119,29 +122,21 @@ def extract_data_from_event(event_data, start_time, config):
     first_ts = min(timestamps)
     last_ts = max(timestamps)
     actual_duration = (last_ts - first_ts).total_seconds()
-    
-    print(f"Processing event data: {len(timestamps)} samples.")
-    print(f"  Absolute Start Time: {first_ts.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"  Absolute End Time:   {last_ts.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"  Actual Duration:     {actual_duration:.3f}s")
 
-    # Extract accelerometer data
+    # Store main timestamps array 
+    np_data['timestamps'] = np.array([(ts - first_ts).total_seconds() for ts in timestamps])
+    np_data['absolute_timestamps'] = np.array([ts.timestamp() for ts in timestamps])
+
+    # Extract accelerometer data if enabled
     if config.enable_accel:
-        # Store main timestamps array (used primarily for accelerometer data)
-        np_data['timestamps'] = np.array([(ts - first_ts).total_seconds() for ts in timestamps])
-        np_data['absolute_timestamps'] = np.array([ts.timestamp() for ts in timestamps])
-        
         for accel_idx in range(config.num_accelerometers):
             accel_x, accel_y, accel_z, accel_mag = [], [], [], []
             
-            for data in event_data:
-                 if "timestamp" not in data or not isinstance(data["timestamp"], datetime):
-                     continue
-                 
-                 sensor_dict = data.get("sensor_data", {})
-                 accel_list = sensor_dict.get("accel_data", [])
-                 
-                 if accel_idx < len(accel_list):
+            for data in valid_data_points:
+                sensor_dict = data.get("sensor_data", {})
+                accel_list = sensor_dict.get("accel_data", [])
+                
+                if accel_idx < len(accel_list):
                     accel = accel_list[accel_idx]
                     if all(k in accel for k in ['x', 'y', 'z']):
                         accel_x.append(accel['x'])
@@ -154,32 +149,27 @@ def extract_data_from_event(event_data, start_time, config):
                         accel_y.append(np.nan)
                         accel_z.append(np.nan)
                         accel_mag.append(np.nan)
-                 else:
-                     accel_x.append(np.nan)
-                     accel_y.append(np.nan)
-                     accel_z.append(np.nan)
-                     accel_mag.append(np.nan)
+                else:
+                    accel_x.append(np.nan)
+                    accel_y.append(np.nan)
+                    accel_z.append(np.nan)
+                    accel_mag.append(np.nan)
 
+            # Store accelerometer data arrays
             if accel_x:
                 np_data[f'accel{accel_idx+1}_x'] = np.array(accel_x)
                 np_data[f'accel{accel_idx+1}_y'] = np.array(accel_y)
                 np_data[f'accel{accel_idx+1}_z'] = np.array(accel_z)
                 np_data[f'accel{accel_idx+1}_mag'] = np.array(accel_mag)
 
-    # Extract LVDT data
+    # Extract LVDT data with specific timestamps
     if config.enable_lvdt:
-        print("LVDT extraction enabled.")
         for lvdt_idx in range(config.num_lvdts):
             lvdt_times = []
             lvdt_displacements = []
-            
-            print(f"Processing LVDT {lvdt_idx+1}")
             valid_count = 0
             
-            for data in event_data:
-                if "timestamp" not in data or not isinstance(data["timestamp"], datetime):
-                    continue
-
+            for data in valid_data_points:
                 sensor_dict = data.get("sensor_data", {})
                 lvdt_list = sensor_dict.get("lvdt_data", [])
 
@@ -192,21 +182,18 @@ def extract_data_from_event(event_data, start_time, config):
                         lvdt_times.append(rel_time)
                         lvdt_displacements.append(disp)
                         valid_count += 1
-                        
-                        if valid_count <= 5:  # Log first 5 valid readings
-                            print(f"    Sample at {rel_time:.3f}s: {disp:.3f}mm")
 
+            # Store LVDT data arrays
             if lvdt_times:
                 key_time = f'lvdt{lvdt_idx+1}_time'
                 key_disp = f'lvdt{lvdt_idx+1}_displacement'
                 np_data[key_time] = np.array(lvdt_times)
                 np_data[key_disp] = np.array(lvdt_displacements)
                 
-                print(f"  Stored {valid_count} valid readings for LVDT {lvdt_idx+1}")
-                print(f"  Time range: {min(lvdt_times):.3f}s to {max(lvdt_times):.3f}s")
-                print(f"  Value range: {min(lvdt_displacements):.3f}mm to {max(lvdt_displacements):.3f}mm")
-            else:
-                print(f"  No valid readings found for LVDT {lvdt_idx+1}")
+                # Log summary
+                disp_min = min(lvdt_displacements)
+                disp_max = max(lvdt_displacements)
+                print(f"Processed LVDT {lvdt_idx+1}: {valid_count} samples, range: {disp_min:.2f}mm to {disp_max:.2f}mm")
 
     return np_data
 
