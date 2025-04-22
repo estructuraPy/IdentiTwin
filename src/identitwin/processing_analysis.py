@@ -217,20 +217,35 @@ def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
 def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, filename, config):
     """Create time series and FFT analysis plots for all sensors."""
     try:
-        # Adjust timestamps to include pretrigger and posttrigger
-        total_duration = len(np_data['timestamps']) * config.time_step_acceleration
-        t = np.linspace(0, total_duration, len(np_data['timestamps']))
+        if 'timestamps' not in np_data or len(np_data['timestamps']) == 0:
+             print("Error: No timestamps available for plotting.")
+             return False
+             
+        t_main = np_data['timestamps']
+        total_duration = t_main[-1] if len(t_main) > 0 else 0.0
+        pre_trigger_time = getattr(config, 'pre_trigger_time', 5.0)
         
         # Plot each accelerometer separately
         for accel_idx in range(config.num_accelerometers):
+            accel_key_x = f'accel{accel_idx+1}_x'
+            if accel_key_x not in np_data:
+                 print(f"Warning: Data for {accel_key_x} not found, skipping plot.")
+                 continue
+                 
             try:
                 fig = plt.figure(figsize=(12, 10))
                 
                 # Time series plot
                 ax_time = fig.add_subplot(2, 1, 1)
-                ax_time.plot(t, np_data[f'accel{accel_idx+1}_x'], 'r', label='X', alpha=0.8)
-                ax_time.plot(t, np_data[f'accel{accel_idx+1}_y'], 'g', label='Y', alpha=0.8)
-                ax_time.plot(t, np_data[f'accel{accel_idx+1}_z'], 'b', label='Z', alpha=0.8)
+                # Plot data, handling potential NaNs if necessary (e.g., using np.ma.masked_invalid)
+                ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_x']), 'r', label='X', alpha=0.8)
+                ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
+                ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
+                
+                # Add vertical line for pretrigger to event boundary
+                ax_time.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5, 
+                              label=f'Event Start ({pre_trigger_time:.1f}s)')
+                
                 ax_time.set_xlabel('Time (s)')
                 ax_time.set_ylabel('Acceleration (m/s²)')
                 ax_time.set_title(f'Accelerometer {accel_idx+1} - Time Series')
@@ -239,9 +254,10 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 
                 # FFT plot for this accelerometer
                 ax_fft = fig.add_subplot(2, 1, 2)
-                ax_fft.plot(freqs, fft_x, 'r', label='X', alpha=0.8)
-                ax_fft.plot(freqs, fft_y, 'g', label='Y', alpha=0.8)
-                ax_fft.plot(freqs, fft_z, 'b', label='Z', alpha=0.8)
+                # Ensure freqs and fft data align and handle potential NaNs if FFT calculated on NaN data
+                ax_fft.plot(freqs, np.ma.masked_invalid(fft_x), 'r', label='X', alpha=0.8)
+                ax_fft.plot(freqs, np.ma.masked_invalid(fft_y), 'g', label='Y', alpha=0.8)
+                ax_fft.plot(freqs, np.ma.masked_invalid(fft_z), 'b', label='Z', alpha=0.8)
                 ax_fft.set_xlabel('Frequency (Hz)')
                 ax_fft.set_ylabel('Amplitude')
                 ax_fft.set_title(f'Accelerometer {accel_idx+1} - Frequency Analysis')
@@ -249,54 +265,92 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 ax_fft.legend()
                 
                 # Add timestamp and save
-                fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}', fontsize=14, y=0.995)
-                plt.tight_layout(rect=[0, 0, 1, 0.97])
+                fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s', fontsize=14, y=0.995)
+                plt.tight_layout(rect=[0, 0, 1, 0.97]) # Adjust layout
                 accel_filename = f"{os.path.splitext(filename)[0]}_accel{accel_idx+1}.png"
                 plt.savefig(accel_filename, dpi=300, bbox_inches='tight')
-                plt.close()
+                plt.close(fig) # Close the specific figure
                 print(f"Generated accelerometer {accel_idx+1} plot at: {accel_filename}")
             
             except Exception as e:
                 print(f"Error creating plot for accelerometer {accel_idx+1}: {e}")
                 traceback.print_exc()
+                if 'fig' in locals() and plt.fignum_exists(fig.number):
+                     plt.close(fig) # Ensure figure is closed on error
         
         # Create single plot for all LVDTs
         if config.enable_lvdt:
+            print("Attempting to plot LVDTs...") # Debug print
             try:
                 fig = plt.figure(figsize=(12, 6))
                 ax = fig.add_subplot(111)
+                plotted_lvdt = False
                 
                 # Plot each LVDT on the same axes
                 for lvdt_idx in range(config.num_lvdts):
-                    if f'lvdt{lvdt_idx+1}_displacement' in np_data:
-                        lvdt_data = np_data[f'lvdt{lvdt_idx+1}_displacement']
-                        lvdt_t = np.linspace(0, total_duration, len(lvdt_data))  # Align timestamps
-                        ax.plot(lvdt_t, lvdt_data, label=f'LVDT {lvdt_idx+1}', alpha=0.8)
-                
-                ax.set_xlabel('Time (s)')
-                ax.set_ylabel('Displacement (mm)')
-                ax.set_title('LVDT Displacements')
-                ax.grid(True, alpha=0.3)
-                ax.legend(loc='best')
-                
-                # Add timestamp and save
-                fig.suptitle(f'LVDT Analysis - {timestamp_str}', fontsize=14, y=0.95)
-                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-                lvdt_filename = f"{os.path.splitext(filename)[0]}_lvdt_all.png"
-                plt.savefig(lvdt_filename, dpi=300, bbox_inches='tight')
-                plt.close()
-                print(f"Generated combined LVDT plot at: {lvdt_filename}")
+                    time_key = f'lvdt{lvdt_idx+1}_time'
+                    disp_key = f'lvdt{lvdt_idx+1}_displacement'
                     
+                    print(f"Checking LVDT {lvdt_idx+1} data...")
+                    
+                    if time_key in np_data and disp_key in np_data:
+                        lvdt_times = np_data[time_key]
+                        lvdt_data = np_data[disp_key]
+                        
+                        if len(lvdt_times) > 0:
+                            print(f"  Plotting {len(lvdt_times)} points for LVDT {lvdt_idx+1}")
+                            print(f"  First time: {lvdt_times[0]:.3f}s, Last time: {lvdt_times[-1]:.3f}s")
+                            print(f"  Data range: {np.min(lvdt_data):.3f}mm to {np.max(lvdt_data):.3f}mm")
+                            
+                            ax.plot(lvdt_times, lvdt_data, 
+                                   label=f'LVDT {lvdt_idx+1}',
+                                   marker='.',        # Add markers
+                                   markersize=4,      # Small markers
+                                   linestyle='-',     # Solid line between points
+                                   alpha=0.8)         # Slight transparency
+                            plotted_lvdt = True
+                        else:
+                            print(f"  No valid data points for LVDT {lvdt_idx+1}")
+                    else:
+                        print(f"  Missing time or displacement data for LVDT {lvdt_idx+1}")
+                
+                if plotted_lvdt:
+                    # Add vertical line for pretrigger
+                    ax.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5,
+                             label=f'Event Start ({pre_trigger_time:.1f}s)')
+                    
+                    ax.set_xlabel('Time (s)')
+                    ax.set_ylabel('Displacement (mm)')
+                    ax.set_title('LVDT Displacements')
+                    ax.grid(True, alpha=0.3)
+                    ax.legend(loc='best')
+                    
+                    fig.suptitle(f'LVDT Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s',
+                               fontsize=14, y=0.95)
+                    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                    
+                    lvdt_filename = f"{os.path.splitext(filename)[0]}_lvdt_all.png"
+                    plt.savefig(lvdt_filename, dpi=300, bbox_inches='tight')
+                    print(f"Generated combined LVDT plot: {lvdt_filename}")
+                else:
+                    print("No LVDT data was plotted.")
+                    
+                plt.close(fig)
+                
             except Exception as e:
-                print(f"Error creating combined LVDT plot: {e}")
+                print(f"Error creating LVDT plot: {e}")
                 traceback.print_exc()
+                if 'fig' in locals() and plt.fignum_exists(fig.number):
+                    plt.close(fig)
+        else:
+            print("LVDT plotting disabled in config.")
         
         return True
         
     except Exception as e:
         print(f"Error creating analysis plots: {e}")
         traceback.print_exc()
-        plt.close()
+        plt.close('all')
         return False
 
 def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z, max_mag,

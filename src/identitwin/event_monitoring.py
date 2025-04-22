@@ -73,7 +73,9 @@ class EventMonitor:
         
         self.in_event_recording = False
         self.current_event_data = []
-        self.pre_trigger_buffer = deque(maxlen=1000)  # adjust buffer size as needed
+        # Calculate pre_trigger_buffer size based on config
+        pre_trigger_samples = int(config.pre_trigger_time / config.time_step_acceleration)
+        self.pre_trigger_buffer = deque(maxlen=pre_trigger_samples) 
         self.last_trigger_time = 0
         
         # Initialize moving averages with deque buffers
@@ -153,9 +155,12 @@ class EventMonitor:
                 self.in_event_recording = True
                 state.set_event_variable("is_event_recording", True)
                 state.set_event_variable("last_trigger_time", current_time)
-                self.current_event_data = list(self.pre_trigger_buffer)
+                # Initialize current_event_data with the full pre_trigger_buffer content
+                self.current_event_data = list(self.pre_trigger_buffer) 
             
-            self.current_event_data.append(sensor_data)
+            # Append the triggering data point if it's not already the last one from the buffer
+            if not self.current_event_data or sensor_data != self.current_event_data[-1]:
+                 self.current_event_data.append(sensor_data)
             return True
             
         except Exception as e:
@@ -165,30 +170,40 @@ class EventMonitor:
     def _handle_event_recording(self, sensor_data, current_time):
         """Handle ongoing event recording and check for completion."""
         try:
+            # Append new data point during recording
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
             
+            # Check if post-trigger duration has passed since the *last* trigger time
             if current_time - self.last_trigger_time > post_trigger_time:
-                event_duration = len(self.current_event_data) * self.config.time_step_acceleration
+                # Calculate duration based on the number of samples *after* the pre-trigger part
+                # The pre-trigger part's length is self.pre_trigger_buffer.maxlen
+                event_samples = len(self.current_event_data) - self.pre_trigger_buffer.maxlen
+                event_duration = event_samples * self.config.time_step_acceleration
                 min_duration = self.thresholds.get("min_event_duration", 2.0)
                 
                 if event_duration >= min_duration:
                     try:
-                        # Include pretrigger and posttrigger data in the event
-                        complete_event_data = list(self.pre_trigger_buffer) + self.current_event_data
+                        # Pass the complete data (pre-trigger + event + post-trigger)
+                        complete_event_data = self.current_event_data
                         self.event_data_buffer.put(complete_event_data)
-                        event_time = complete_event_data[0]["timestamp"]
+                        # Use the timestamp of the *first* data point (start of pre-trigger)
+                        event_time = complete_event_data[0]["timestamp"] 
                         self._save_event_data(complete_event_data, event_time)
-                        self.event_count_ref[0] += 1  # Increment event count here
+                        self.event_count_ref[0] += 1
                         state.set_event_variable("event_count", self.event_count_ref[0])
-                        print(f"Event complete - duration={event_duration:.2f}s")
+                        # Calculate total duration including pre-trigger
+                        total_recorded_duration = len(complete_event_data) * self.config.time_step_acceleration
+                        print(f"Event complete - total duration={total_recorded_duration:.2f}s (including pre/post trigger)")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
-                
-                # Reset event state
+                else:
+                     print(f"Event too short ({event_duration:.2f}s), discarding.")
+
+                # Reset event state regardless of duration check
                 self.in_event_recording = False
                 self.current_event_data = []
-                self.pre_trigger_buffer.clear()
+                # Keep pre_trigger_buffer intact for next potential event
                 state.set_event_variable("is_event_recording", False)
             
             return True

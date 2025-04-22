@@ -335,7 +335,10 @@ class MonitoringSystem:
                 current_time = time.perf_counter()
 
                 # Data structure for this sample
+                # Ensure sensor_data is reset for each loop iteration
                 sensor_data = {"timestamp": datetime.now(), "sensor_data": {}}
+                accel_acquired = False
+                lvdt_acquired = False
 
                 # Accelerometer data acquisition - Strict timing control
                 if self.accelerometers and current_time >= next_acquisition_time:
@@ -381,7 +384,9 @@ class MonitoringSystem:
                             print(f"Error reading accelerometer {i+1}: {e}")
                             accel_data.append({"x": 0.0, "y": 0.0, "z": 0.0})
 
-                    sensor_data["sensor_data"]["accel_data"] = accel_data
+                    if accel_data:  # Check if data was actually read
+                        sensor_data["sensor_data"]["accel_data"] = accel_data
+                        accel_acquired = True
 
                     # Append accelerometer data to acceleration.csv
                     if self.config.enable_accel:
@@ -444,7 +449,9 @@ class MonitoringSystem:
                             print(f"Error reading LVDT {i+1}: {e}")
                             lvdt_data.append({"voltage": 0.0, "displacement": 0.0})
 
-                    sensor_data["sensor_data"]["lvdt_data"] = lvdt_data
+                    if lvdt_data:  # Check if data was actually read
+                        sensor_data["sensor_data"]["lvdt_data"] = lvdt_data
+                        lvdt_acquired = True
 
                     # Append LVDT data to displacement.csv
                     if self.config.enable_lvdt:
@@ -457,25 +464,26 @@ class MonitoringSystem:
                                     lvdt["displacement"]
                                 ])
 
-                # Append combined data to general_measurements.csv
-                with open(self.csv_file_general, mode="a", newline="") as file:
-                    writer = csv.writer(file)
-                    row = [sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f")]
+                # Append combined data to general_measurements.csv only if data was acquired
+                if accel_acquired or lvdt_acquired:
+                    with open(self.csv_file_general, mode="a", newline="") as file:
+                        writer = csv.writer(file)
+                        row = [sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f")]
 
-                    # Add LVDT data
-                    if "lvdt_data" in sensor_data["sensor_data"]:
-                        for lvdt in sensor_data["sensor_data"]["lvdt_data"]:
-                            row.extend([lvdt["voltage"], lvdt["displacement"]])
+                        # Add LVDT data
+                        if "lvdt_data" in sensor_data["sensor_data"]:
+                            for lvdt in sensor_data["sensor_data"]["lvdt_data"]:
+                                row.extend([lvdt["voltage"], lvdt["displacement"]])
 
-                    # Add accelerometer data
-                    if "accel_data" in sensor_data["sensor_data"]:
-                        for accel in sensor_data["sensor_data"]["accel_data"]:
-                            magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
-                            row.extend([accel["x"], accel["y"], accel["z"], magnitude])
+                        # Add accelerometer data
+                        if "accel_data" in sensor_data["sensor_data"]:
+                            for accel in sensor_data["sensor_data"]["accel_data"]:
+                                magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
+                                row.extend([accel["x"], accel["y"], accel["z"], magnitude])
 
-                    writer.writerow(row)
+                        writer.writerow(row)
 
-                # Add data to the queue if there is any sensor data
+                # Add data to the queue only if there is *any* sensor data in this iteration
                 if sensor_data["sensor_data"]:
                     try:
                         # Use append for deque instead of put for Queue
