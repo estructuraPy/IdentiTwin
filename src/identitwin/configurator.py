@@ -67,9 +67,9 @@ class SystemConfig:
         detrigger_acceleration_threshold=None,
         trigger_displacement_threshold=None,
         detrigger_displacement_threshold=None,
-        pre_trigger_time=2.0,
-        post_trigger_time=5.0,
-        min_event_duration=1.0,
+        pre_event_time=5.0,   # Renamed from pre_trigger_time
+        post_event_time=15.0, # Renamed from post_trigger_time
+        min_event_duration=2.0,
     ):
         """Initialize system configuration."""
         # Set output directory first to avoid the AttributeError
@@ -142,8 +142,8 @@ class SystemConfig:
         )
 
         # Event detection parameters - renamed for consistency
-        self.pre_trigger_time = pre_trigger_time  # Changed
-        self.post_trigger_time = post_trigger_time # Changed
+        self.pre_event_time = pre_event_time    # Renamed
+        self.post_event_time = post_event_time  # Renamed
         self.min_event_duration = min_event_duration
 
         # LVDT configuration - these default values can be overridden locally
@@ -198,8 +198,10 @@ class SystemConfig:
         thresholds = {
             "acceleration": self.trigger_acceleration_threshold if self.enable_accel else None,
             "displacement": self.trigger_displacement_threshold if self.enable_lvdt else None,
-            "pre_event_time": self.pre_trigger_time,
-            "post_event_time": self.post_trigger_time,
+            "detrigger_acceleration": self.detrigger_acceleration_threshold, # Added
+            "detrigger_displacement": self.detrigger_displacement_threshold, # Added
+            "pre_event_time": self.pre_event_time,      # Renamed
+            "post_event_time": self.post_event_time,    # Renamed
             "min_event_duration": self.min_event_duration,
         }
         return thresholds

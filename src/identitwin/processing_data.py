@@ -186,19 +186,12 @@ def extract_data_from_event(event_data, start_time, config):
                         lvdt_times.append(rel_time)
                         lvdt_displacements.append(disp)
                         valid_count += 1
-                        
-                        if valid_count <= 5:  # Log first 5 valid readings
-                            print(f"    Sample at {rel_time:.3f}s: {disp:.3f}mm")
 
             if lvdt_times:
                 key_time = f'lvdt{lvdt_idx+1}_time'
                 key_disp = f'lvdt{lvdt_idx+1}_displacement'
                 np_data[key_time] = np.array(lvdt_times)
                 np_data[key_disp] = np.array(lvdt_displacements)
-                
-                print(f"  Stored {valid_count} valid readings for LVDT {lvdt_idx+1}")
-                print(f"  Time range: {min(lvdt_times):.3f}s to {max(lvdt_times):.3f}s")
-                print(f"  Value range: {min(lvdt_displacements):.3f}mm to {max(lvdt_displacements):.3f}mm")
             else:
                 print(f"  No valid readings found for LVDT {lvdt_idx+1}")
 
@@ -254,14 +247,14 @@ def create_acceleration_csv(event_data, event_folder, config):
             # Get start time from first entry
             start_time = event_data[0]["timestamp"]
             
-            # Write data
+            # Write data - similar to displacement CSV logic
             for i, data in enumerate(event_data):
                 if "accel_data" in data["sensor_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
                     expected_time = i * (1.0 / config.sampling_rate_acceleration)
                     row = [timestamp, f"{expected_time:.6f}"]
                     for accel in data["sensor_data"]["accel_data"]:
-                        magnitude = np.sqrt(accel['x']**2 + accel['y']**2 + accel['z']**2)
+                        magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
                         row.extend([
                             f"{accel['x']:.6f}", 
                             f"{accel['y']:.6f}", 

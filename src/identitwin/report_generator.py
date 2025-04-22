@@ -53,8 +53,8 @@ def generate_system_report(config, filename):
             f.write("## Event detection parameters:\n")
             f.write(f"  Acceleration Threshold: {config.trigger_acceleration_threshold} m/s^2\n")
             f.write(f"  Displacement Threshold: {config.trigger_displacement_threshold} mm\n")
-            f.write(f"  Pre-trigger Buffer: {config.pre_trigger_time} seconds\n")
-            f.write(f"  Post-trigger Buffer: {config.post_trigger_time} seconds\n")
+            f.write(f"  Pre-trigger Buffer: {config.pre_event_time} seconds\n")
+            f.write(f"  Post-trigger Buffer: {config.post_event_time} seconds\n")
             f.write(f"  Minimum Event Duration: {config.min_event_duration} seconds\n\n")
             
             # Data Storage

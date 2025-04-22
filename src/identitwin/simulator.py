@@ -102,9 +102,9 @@ class SimulatorConfig:
         detrigger_acceleration_threshold=None,
         trigger_displacement_threshold=None,
         detrigger_displacement_threshold=None,
-        pre_trigger_time=2.0,
-        post_trigger_time=5.0,
-        min_event_duration=1.0,
+        pre_event_time=5.0,
+        post_event_time=15.0,
+        min_event_duration=2.0,
         verbose=False,  # Add verbosity flag
     ):
         self.verbose = verbose  # Store verbosity setting
@@ -145,8 +145,8 @@ class SimulatorConfig:
         self.detrigger_acceleration_threshold = detrigger_acceleration_threshold or (self.trigger_acceleration_threshold * 0.5)
         self.detrigger_displacement_threshold = detrigger_displacement_threshold or (self.trigger_displacement_threshold * 0.5)
         
-        self.pre_trigger_time = pre_trigger_time
-        self.post_trigger_time = post_trigger_time
+        self.pre_event_time = pre_event_time # Corrected
+        self.post_event_time = post_event_time # Corrected
         self.min_event_duration = min_event_duration
         
         # Parámetros de simulación para LVDT
@@ -170,8 +170,8 @@ class SimulatorConfig:
         return {
             "acceleration": self.trigger_acceleration_threshold if self.enable_accel else None,
             "displacement": self.trigger_displacement_threshold if self.enable_lvdt else None,
-            "pre_event_time": self.pre_trigger_time,
-            "post_event_time": self.post_trigger_time,
+            "pre_event_time": self.pre_event_time, # Corrected
+            "post_event_time": self.post_event_time, # Corrected
             "min_event_duration": self.min_event_duration,
         }
 

@@ -144,7 +144,7 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
             accel_data = {
                 'x': np_data['accel1_x'],
                 'y': np_data['accel1_y'],  # Fix: remove np. prefix
-                'z': np_data['accel1_z']   # Fix: remove np. prefix
+                'z': np_data['accel1_z']   # Fix: correct np.data to np_data
             }
             
             # Calculate FFT for all axes
@@ -223,7 +223,8 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
              
         t_main = np_data['timestamps']
         total_duration = t_main[-1] if len(t_main) > 0 else 0.0
-        pre_trigger_time = getattr(config, 'pre_trigger_time', 5.0)
+        pre_event_time = getattr(config, 'pre_event_time', 5.0)
+        post_event_time = getattr(config, 'post_event_time', 15.0)
         
         # Plot each accelerometer separately
         for accel_idx in range(config.num_accelerometers):
@@ -237,15 +238,24 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 
                 # Time series plot
                 ax_time = fig.add_subplot(2, 1, 1)
-                # Plot data, handling potential NaNs if necessary (e.g., using np.ma.masked_invalid)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_x']), 'r', label='X', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
                 
-                # Add vertical line for pretrigger to event boundary
-                ax_time.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5, 
-                              label=f'Event Start ({pre_trigger_time:.1f}s)')
-                
+                # Líneas verticales para trigger y postrigger
+                ax_time.axvline(x=pre_event_time, color='k', linestyle='--', alpha=0.7, label='Pre-Event')
+                ax_time.axvline(x=total_duration - post_event_time, color='m', linestyle='--', alpha=0.7, label='Post-Event')
+
+                # Líneas horizontales para thresholds de trigger y detrigger (aceleraciones)
+                if hasattr(config, 'trigger_acceleration_threshold'):
+                    trigger_threshold_accel = config.trigger_acceleration_threshold
+                    ax_time.axhline(y=trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8, label='Trigger Threshold (Accel)')
+                    ax_time.axhline(y=-trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8)
+                if hasattr(config, 'detrigger_acceleration_threshold'):
+                    detrigger_threshold_accel = config.detrigger_acceleration_threshold
+                    ax_time.axhline(y=detrigger_threshold_accel, color='purple', linestyle=':', alpha=0.8, label='Detrigger Threshold (Accel)')
+                    ax_time.axhline(y=-detrigger_threshold_accel, color='purple', linestyle=':', alpha=0.8)
+
                 ax_time.set_xlabel('Time (s)')
                 ax_time.set_ylabel('Acceleration (m/s²)')
                 ax_time.set_title(f'Accelerometer {accel_idx+1} - Time Series')
@@ -254,7 +264,6 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 
                 # FFT plot for this accelerometer
                 ax_fft = fig.add_subplot(2, 1, 2)
-                # Ensure freqs and fft data align and handle potential NaNs if FFT calculated on NaN data
                 ax_fft.plot(freqs, np.ma.masked_invalid(fft_x), 'r', label='X', alpha=0.8)
                 ax_fft.plot(freqs, np.ma.masked_invalid(fft_y), 'g', label='Y', alpha=0.8)
                 ax_fft.plot(freqs, np.ma.masked_invalid(fft_z), 'b', label='Z', alpha=0.8)
@@ -264,7 +273,6 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                 ax_fft.grid(True, alpha=0.3)
                 ax_fft.legend()
                 
-                # Add timestamp and save
                 fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s', fontsize=14, y=0.995)
                 plt.tight_layout(rect=[0, 0, 1, 0.97]) # Adjust layout
                 accel_filename = f"{os.path.splitext(filename)[0]}_accel{accel_idx+1}.png"
@@ -315,10 +323,20 @@ def create_analysis_plots(np_data, freqs, fft_x, fft_y, fft_z, timestamp_str, fi
                         print(f"  Missing time or displacement data for LVDT {lvdt_idx+1}")
                 
                 if plotted_lvdt:
-                    # Add vertical line for pretrigger
-                    ax.axvline(x=pre_trigger_time, color='k', linestyle='--', alpha=0.5,
-                             label=f'Event Start ({pre_trigger_time:.1f}s)')
-                    
+                    # Líneas verticales para trigger y postrigger (ubicación corregida)
+                    ax.axvline(x=pre_event_time, color='k', linestyle='--', alpha=0.7, label='Pre-Event')
+                    ax.axvline(x=total_duration - post_event_time, color='m', linestyle='--', alpha=0.7, label='Post-Event')
+
+                    # Líneas horizontales para thresholds de trigger y detrigger (desplazamientos)
+                    if hasattr(config, 'trigger_displacement_threshold'):
+                        trigger_threshold_disp = config.trigger_displacement_threshold
+                        ax.axhline(y=trigger_threshold_disp, color='orange', linestyle=':', alpha=0.8, label='Trigger Threshold (Disp)')
+                        ax.axhline(y=-trigger_threshold_disp, color='orange', linestyle=':', alpha=0.8)
+                    if hasattr(config, 'detrigger_displacement_threshold'):
+                        detrigger_threshold_disp = config.detrigger_displacement_threshold
+                        ax.axhline(y=detrigger_threshold_disp, color='purple', linestyle=':', alpha=0.8, label='Detrigger Threshold (Disp)')
+                        ax.axhline(y=-detrigger_threshold_disp, color='purple', linestyle=':', alpha=0.8)
+
                     ax.set_xlabel('Time (s)')
                     ax.set_ylabel('Displacement (mm)')
                     ax.set_title('LVDT Displacements')
@@ -495,7 +513,7 @@ def reset_acquisition_timers(np_data, config):
                 print(f"Resetting LVDT timers (drift: {drift:.2f}%)")
                 # Recalcular timestamps para LVDTs
                 np_data['lvdt_timestamps'] = np.linspace(
-                    np_data['timestamps'][0],
-                    np_data['timestamps'][-1],
+                    np.data['timestamps'][0],
+                    np.data['timestamps'][-1],
                     lvdt_samples
                 )

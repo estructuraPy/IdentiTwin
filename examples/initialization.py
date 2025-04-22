@@ -50,8 +50,8 @@ ACCEL_DETRIGGER_THRESHOLD = 0.589  # m/s^2 (60% of trigger threshold)
 DISPLACEMENT_TRIGGER_THRESHOLD = 10.0  # mm
 DISPLACEMENT_DETRIGGER_THRESHOLD = 5.0  # mm
 
-PRE_TRIGGER_TIME = 5.0  # seconds
-POST_TRIGGER_TIME = 15.0  # seconds
+PRE_EVENT_TIME = 5.0  # seconds (Time recorded before the trigger)
+POST_EVENT_TIME = 15.0 # seconds (Time recorded after the event ends)
 MIN_EVENT_DURATION = 2.0  # seconds
 
 # Define default sensor and plot settings.
@@ -381,8 +381,8 @@ def create_system_config():
         detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
         trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
         detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
-        pre_trigger_time=PRE_TRIGGER_TIME,
-        post_trigger_time=POST_TRIGGER_TIME,
+        pre_event_time=PRE_EVENT_TIME,
+        post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION
     )
     return config
@@ -428,8 +428,8 @@ def main():
         detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
         trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
         detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
-        pre_trigger_time=PRE_TRIGGER_TIME,
-        post_trigger_time=POST_TRIGGER_TIME,
+        pre_event_time=PRE_EVENT_TIME,
+        post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION
     )
 
@@ -448,8 +448,8 @@ def main():
     print("\nEvent Detection Parameters:")
     print(f"  - Acceleration Trigger Threshold: {ACCEL_TRIGGER_THRESHOLD} m/s2")
     print(f"  - Displacement Trigger Threshold: {DISPLACEMENT_TRIGGER_THRESHOLD} mm")
-    print(f"  - Pre-Trigger Buffer: {PRE_TRIGGER_TIME} seconds")
-    print(f"  - Post-Trigger Buffer: {POST_TRIGGER_TIME} seconds")
+    print(f"  - Pre-Trigger Buffer: {PRE_EVENT_TIME} seconds")
+    print(f"  - Post-Trigger Buffer: {POST_EVENT_TIME} seconds")
     print(f"  - Minimum Event Duration: {MIN_EVENT_DURATION} seconds")
 
     if args.output_dir:

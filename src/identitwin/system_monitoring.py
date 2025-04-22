@@ -209,8 +209,8 @@ class MonitoringSystem:
                 "displacement": self.config.trigger_displacement_threshold,
                 "detrigger_acceleration": self.config.detrigger_acceleration_threshold,
                 "detrigger_displacement": self.config.detrigger_displacement_threshold,
-                "pre_event_time": self.config.pre_trigger_time,
-                "post_event_time": self.config.post_trigger_time,
+                "pre_event_time": self.config.pre_event_time, # Corrected
+                "post_event_time": self.config.post_event_time, # Corrected
                 "min_event_duration": self.config.min_event_duration,
             }
 

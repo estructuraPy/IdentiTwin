@@ -74,7 +74,7 @@ class EventMonitor:
         self.in_event_recording = False
         self.current_event_data = []
         # Calculate pre_trigger_buffer size based on config
-        pre_trigger_samples = int(config.pre_trigger_time / config.time_step_acceleration)
+        pre_trigger_samples = int(config.pre_event_time / config.time_step_acceleration) # Corrected
         self.pre_trigger_buffer = deque(maxlen=pre_trigger_samples) 
         self.last_trigger_time = 0
         
@@ -184,8 +184,9 @@ class EventMonitor:
                 
                 if event_duration >= min_duration:
                     try:
-                        # Pass the complete data (pre-trigger + event + post-trigger)
-                        complete_event_data = self.current_event_data
+                        print(f"Finalizing event with {len(self.current_event_data)} total samples")
+                        # Make a deep copy to ensure we don't lose data during processing
+                        complete_event_data = list(self.current_event_data)
                         self.event_data_buffer.put(complete_event_data)
                         # Use the timestamp of the *first* data point (start of pre-trigger)
                         event_time = complete_event_data[0]["timestamp"] 
@@ -197,6 +198,7 @@ class EventMonitor:
                         print(f"Event complete - total duration={total_recorded_duration:.2f}s (including pre/post trigger)")
                     except Exception as e:
                         logging.error(f"Error saving event: {e}")
+                        traceback.print_exc()  # Add traceback to debug the issue
                 else:
                      print(f"Event too short ({event_duration:.2f}s), discarding.")
 
@@ -210,6 +212,7 @@ class EventMonitor:
             
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
+            traceback.print_exc()  # Add traceback for better debugging
             return False
 
     def event_monitoring_thread(self):
