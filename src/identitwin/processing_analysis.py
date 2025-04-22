@@ -179,10 +179,10 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
             len(np_data['timestamps'])*config.time_step_acceleration,
             np.max(np.abs(np_data.get('accel1_x',[]))),
             np.max(np.abs(np_data.get('accel1_y',[]))),
-            np.max(np.abs(np.data.get('accel1_z',[]))),
-            np.sqrt(np.max(np.abs(np.data.get('accel1_x',[])))**2 +
-                    np.max(np.abs(np.data.get('accel1_y',[])))**2 +
-                    np.max(np.abs(np.data.get('accel1_z',[])))**2),
+            np.max(np.abs(np_data.get('accel1_z',[]))),
+            np.sqrt(np.max(np.abs(np_data.get('accel1_x',[])))**2 +
+                    np.max(np.abs(np_data.get('accel1_y',[])))**2 +
+                    np.max(np.abs(np_data.get('accel1_z',[])))**2),
             fft_results[0]['x'] if fft_results else [],
             fft_results[0]['y'] if fft_results else [],
             fft_results[0]['z'] if fft_results else [],
@@ -538,7 +538,7 @@ def reset_acquisition_timers(np_data, config):
                 print(f"Resetting LVDT timers (drift: {drift:.2f}%)")
                 # Recalcular timestamps para LVDTs
                 np_data['lvdt_timestamps'] = np.linspace(
-                    np.data['timestamps'][0],
-                    np.data['timestamps'][-1],
+                    np_data['timestamps'][0],
+                    np_data['timestamps'][-1],
                     lvdt_samples
                 )
