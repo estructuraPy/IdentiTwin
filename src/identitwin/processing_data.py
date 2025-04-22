@@ -119,13 +119,7 @@ def extract_data_from_event(event_data, start_time, config):
     first_ts = min(timestamps)
     last_ts = max(timestamps)
     actual_duration = (last_ts - first_ts).total_seconds()
-    
-    print(f"Processing event data: {len(timestamps)} samples.")
-    print(f"  Absolute Start Time: {first_ts.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"  Absolute End Time:   {last_ts.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"  Actual Duration:     {actual_duration:.3f}s")
 
-    # Extract accelerometer data
     if config.enable_accel:
         # Store main timestamps array (used primarily for accelerometer data)
         np_data['timestamps'] = np.array([(ts - first_ts).total_seconds() for ts in timestamps])
