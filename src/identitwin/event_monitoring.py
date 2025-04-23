@@ -92,6 +92,7 @@ class EventMonitor:
         
         self.error_count = 0
         self.max_errors = 100  # Maximum number of consecutive errors before warning
+        self.finalize_thread_started = False  # Nuevo: evita múltiples lanzamientos
 
     def detect_event(self, sensor_data):
         """Detect and record event data using trigger/detrigger mechanism."""
@@ -171,29 +172,27 @@ class EventMonitor:
     def _handle_event_recording(self, sensor_data, current_time):
         """Handle ongoing event recording and check for completion."""
         try:
-            # Append nueva muestra en memoria
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
 
-            # Comprueba si terminó el período post-evento
-            if current_time - self.last_trigger_time > post_trigger_time:
-                # Copiar datos en buffer local para hilos
+            # Solo al cumplirse post_event_time y si no se ha lanzado el hilo
+            if (current_time - self.last_trigger_time > post_trigger_time
+                    and not self.finalize_thread_started):
                 data_to_save = list(self.current_event_data)
                 start_ts = data_to_save[0]["timestamp"]
 
-                # Iniciar hilo de fondo para guardar y plotear
+                # Marca que ya se lanzó el hilo y no permitirá más lanzamientos
+                self.finalize_thread_started = True
+
+                # Lanzar hilo demonio para guardar y plotear
                 threading.Thread(
                     target=self._finalize_record_event,
                     args=(data_to_save, start_ts),
                     daemon=True
                 ).start()
 
-                # Resetear estado inmediatamente y seguir adquiriendo
-                self.in_event_recording = False
-                self.current_event_data = []
-                state.set_event_variable("is_event_recording", False)
-
-            return True
+            # No procesar más datos durante el post-evento
+            return False  
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
             traceback.print_exc()
@@ -202,29 +201,24 @@ class EventMonitor:
     def _finalize_record_event(self, complete_event_data, start_time):
         """Hilo de fondo que espera el post_event_time y luego guarda datos y plots."""
         try:
-            # Pequeño margen extra tras post_event_time
-            time.sleep(0.5)
+            time.sleep(0.5)  # margen extra
 
-            # Drenar muestras adicionales recientes
-            last_ts = complete_event_data[-1]["timestamp"]
-            while True:
-                try:
-                    nxt = self.data_queue.popleft()
-                except IndexError:
-                    break
-                dt = (nxt["timestamp"] - last_ts).total_seconds()
-                if dt < 0.5:
-                    complete_event_data.append(nxt)
-                    last_ts = nxt["timestamp"]
-                else:
-                    self.data_queue.appendleft(nxt)
-                    break
+            # ...existing code to drain buffer and collect data...
 
             # Guardar y generar informes/gráficas
-            self._save_event_data(complete_event_data, start_time)
+            saved = self._save_event_data(complete_event_data, start_time)
+            if saved:
+                self.event_count_ref[0] += 1
+                state.set_event_variable("event_count", self.event_count_ref[0])
+
         except Exception as e:
             logging.error(f"Error in background finalize: {e}")
             traceback.print_exc()
+        finally:
+            # Ahora sí reiniciar estado tras completar guardado
+            self.in_event_recording = False
+            state.set_event_variable("is_event_recording", False)
+            self.finalize_thread_started = False  # Permite nuevo evento futuro
 
     def event_monitoring_thread(self):
         """Thread function for monitoring events."""

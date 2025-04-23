@@ -162,13 +162,9 @@ def extract_data_from_event(event_data, start_time, config):
 
     # Extract LVDT data
     if config.enable_lvdt:
-        print("LVDT extraction enabled.")
         for lvdt_idx in range(config.num_lvdts):
             lvdt_times = []
             lvdt_displacements = []
-            
-            print(f"Processing LVDT {lvdt_idx+1}")
-            valid_count = 0
             
             for data in event_data:
                 if "timestamp" not in data or not isinstance(data["timestamp"], datetime):
@@ -185,15 +181,12 @@ def extract_data_from_event(event_data, start_time, config):
                         rel_time = (data["timestamp"] - first_ts).total_seconds()
                         lvdt_times.append(rel_time)
                         lvdt_displacements.append(disp)
-                        valid_count += 1
 
             if lvdt_times:
                 key_time = f'lvdt{lvdt_idx+1}_time'
                 key_disp = f'lvdt{lvdt_idx+1}_displacement'
                 np_data[key_time] = np.array(lvdt_times)
                 np_data[key_disp] = np.array(lvdt_displacements)
-            else:
-                print(f"  No valid readings found for LVDT {lvdt_idx+1}")
 
     return np_data
 
@@ -224,7 +217,6 @@ def create_displacement_csv(event_data, event_folder, config):
                         row.extend([f"{lvdt['voltage']:.6f}", f"{lvdt['displacement']:.6f}"])
                     writer.writerow(row)
                     
-        print(f"Created displacement CSV file: {os.path.basename(displacement_file)}")
         return displacement_file
     except Exception as e:
         print(f"Error creating displacement CSV: {e}")
@@ -263,7 +255,6 @@ def create_acceleration_csv(event_data, event_folder, config):
                         ])
                     writer.writerow(row)
                     
-        print(f"Created acceleration CSV file: {os.path.basename(acceleration_file)}")
         return acceleration_file
     except Exception as e:
         print(f"Error creating acceleration CSV: {e}")
