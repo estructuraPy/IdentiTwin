@@ -26,6 +26,9 @@ import platform
 from datetime import datetime
 import time
 import numpy as np
+import sys # Import sys for stderr
+import traceback # Import traceback for detailed errors
+
 # Check if we're running on a Raspberry Pi or similar platform
 try:
     # Only import hardware-specific modules if we're on a compatible platform
@@ -34,15 +37,19 @@ try:
     import board
     import busio
     from adafruit_ads1x15.analog_in import AnalogIn
+    # Import the specific mpu6050 library used in the working example
     from mpu6050 import mpu6050
-except (ImportError, NotImplementedError):
-    # For simulation mode, just define variables to avoid errors
+    I2C_AVAILABLE = True
+except (ImportError, NotImplementedError) as e:
+    # For simulation mode or if hardware libs fail
+    print(f"Warning: Hardware libraries not found or failed to import ({e}). Hardware functions disabled.")
     LED = None
     ADS = None
     board = None
     busio = None
     AnalogIn = None
     mpu6050 = None
+    I2C_AVAILABLE = False
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
@@ -208,7 +215,8 @@ class SystemConfig:
 
     def initialize_leds(self):
         """Initialize LED indicators for Raspberry Pi hardware."""
-        if LED is None:
+        if not I2C_AVAILABLE or LED is None: # Check dependency
+            print("Warning: Cannot initialize LEDs, gpiozero library not available.")
             return None, None
         try:
             # Initialize real LEDs using gpiozero
@@ -216,51 +224,116 @@ class SystemConfig:
             activity_led = LED(self.gpio_pins[1])
             status_led.off()
             activity_led.off()
+            print("LEDs initialized successfully.")
             return status_led, activity_led
         except Exception as e:
-            print(f"Warning: Could not initialize LEDs: {e}")
+            print(f"Warning: Could not initialize LEDs: {e}", file=sys.stderr)
             # Return None if LED initialization fails
             return None, None
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
+        if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
+            print("Error: Cannot create ADS1115, required hardware libraries (busio, board, ADS) not available.", file=sys.stderr)
+            return None
         try:
+            # Initialize I2C bus directly here
             i2c = busio.I2C(board.SCL, board.SDA)
+            print("I2C bus initialized successfully for ADS1115.")
+            # Create ADS object using the initialized bus
             ads = ADS.ADS1115(i2c)
             ads.gain = self.lvdt_gain  # Set gain as configured
+            print("ADS1115 object created successfully.")
             return ads
+        except ValueError as e:
+            # Specific error for I2C initialization failure (e.g., no device found)
+            print(f"Error initializing I2C bus for ADS1115: {e}. Check connections/config.", file=sys.stderr)
+            return None
+        except RuntimeError as e:
+            # Specific error often related to permissions or kernel modules
+            print(f"Error initializing I2C bus for ADS1115: {e}. Ensure I2C is enabled and permissions are correct.", file=sys.stderr)
+            return None
+        except NameError as e:
+             # Error if libraries weren't imported correctly
+             print(f"Error: Missing hardware library component ({e}). Cannot create ADS1115.", file=sys.stderr)
+             return None
         except Exception as e:
-            print(f"Error initializing ADS1115: {e}")
+            # Catch other potential errors (like OSError if device address is wrong/busy)
+            print(f"Unexpected error initializing ADS1115: {e}", file=sys.stderr)
+            traceback.print_exc()
             return None
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
+        if ads is None or not I2C_AVAILABLE or AnalogIn is None: # Check dependencies
+             print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
+             return None
         try:
             channels = []
-            # Ciclar entre los canales disponibles para soportar cualquier número de LVDTs
+            # Map ADS pins
             channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
+            print(f"Attempting to create {self.num_lvdts} LVDT channels...")
             for i in range(self.num_lvdts):
-                ch = channel_map[i % len(channel_map)]
-                channel = AnalogIn(ads, ch)
-                channel.voltage = lambda: channel.voltage  # Ensure compatibility
+                if i >= len(channel_map):
+                    print(f"Warning: More LVDTs requested ({self.num_lvdts}) than available ADS pins ({len(channel_map)}). Stopping channel creation.", file=sys.stderr)
+                    break
+                ch_pin = channel_map[i]
+                # Create AnalogIn object for the specific pin
+                channel = AnalogIn(ads, ch_pin)
+                # The AnalogIn object from adafruit_ads1x15 already has a 'voltage' property.
+                # The lambda function is not needed.
                 channels.append(channel)
+                print(f"  LVDT channel {i+1} created on pin {ch_pin}.")
+            print(f"Successfully created {len(channels)} LVDT channel objects.")
             return channels
+        except NameError as e:
+             # Error if ADS or AnalogIn weren't imported correctly
+             print(f"Error: Missing hardware library component ({e}). Cannot create LVDT channels.", file=sys.stderr)
+             return None
         except Exception as e:
-            print(f"Error creating LVDT channels: {e}")
+            print(f"Error creating LVDT channels: {e}", file=sys.stderr)
+            traceback.print_exc()
             return None
 
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
-        try:
-            mpu_list = []
-            for i in range(self.num_accelerometers):
-                addr = 0x68 + i  # Assumes sensors on consecutive I2C addresses
-                mpu_list.append(mpu6050(addr))
-            return mpu_list
-        except Exception as e:
-            print(f"Error initializing accelerometers: {e}")
+        if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
+            print("Error: Cannot create accelerometers, required hardware libraries (mpu6050, busio, board) not available.", file=sys.stderr)
             return None
 
+        mpu_list = []
+        print(f"Attempting to initialize {self.num_accelerometers} accelerometers...")
+        # Note: The mpu6050 library used in the example initializes I2C implicitly when
+        # the object is created with just the address. We don't need to create busio.I2C here.
+        for i in range(self.num_accelerometers):
+            addr = 0x68 + i  # Assumes sensors on consecutive I2C addresses (0x68, 0x69, ...)
+            try:
+                # Instantiate mpu6050 directly with the address, like the example
+                print(f"  Attempting to initialize MPU6050 at address {hex(addr)}...")
+                mpu = mpu6050(addr)
+
+                # Optional: Add a quick check to see if the sensor is responsive
+                try:
+                    temp = mpu.get_temp() # Try reading temperature
+                    print(f"  MPU6050 at {hex(addr)} initialized successfully (Temp: {temp:.1f}C).")
+                    mpu_list.append(mpu)
+                except OSError as comm_err:
+                    # This error often means the device is not present or responding at this address
+                    print(f"  Warning: Could not communicate with MPU6050 at address {hex(addr)} after initialization: {comm_err}. Skipping this sensor.", file=sys.stderr)
+                    continue # Skip this sensor
+
+            except NameError as e:
+                 # Error if mpu6050 wasn't imported correctly
+                 print(f"Error: Missing mpu6050 library component ({e}). Cannot create accelerometer.", file=sys.stderr)
+                 # Stop trying if the library itself is missing
+                 return None
+            except Exception as e:
+                # Catch potential errors during initialization (e.g., OSError if device not found)
+                print(f"  Error initializing MPU6050 at address {hex(addr)}: {e}. Skipping this sensor.", file=sys.stderr)
+                # Continue trying other sensors even if one fails
+
+        print(f"Successfully created {len(mpu_list)} MPU6050 objects.")
+        return mpu_list if mpu_list else None # Return list or None if empty
 
 # Utility functions
 def leds(gpio_pins):
