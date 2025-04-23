@@ -215,11 +215,18 @@ class SystemConfig:
 
     def initialize_leds(self):
         """Initialize LED indicators for Raspberry Pi hardware."""
-        if not I2C_AVAILABLE or LED is None: # Check dependency
-            print("Warning: Cannot initialize LEDs, gpiozero library not available.")
+        # Check specifically if the LED class from gpiozero was imported successfully
+        if LED is None:
+            print("Warning: Cannot initialize LEDs, 'gpiozero' library not available or failed to import.")
             return None, None
+        # Check if GPIO pins are configured
+        if not self.gpio_pins or len(self.gpio_pins) < 2:
+             print("Warning: Cannot initialize LEDs, GPIO pins not configured correctly.")
+             return None, None
+
         try:
             # Initialize real LEDs using gpiozero
+            print(f"Attempting to initialize LEDs on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             status_led = LED(self.gpio_pins[0])
             activity_led = LED(self.gpio_pins[1])
             status_led.off()
@@ -227,7 +234,8 @@ class SystemConfig:
             print("LEDs initialized successfully.")
             return status_led, activity_led
         except Exception as e:
-            print(f"Warning: Could not initialize LEDs: {e}", file=sys.stderr)
+            # Catch potential errors during LED object creation (e.g., invalid pin)
+            print(f"Warning: Could not initialize LEDs on specified pins: {e}", file=sys.stderr)
             # Return None if LED initialization fails
             return None, None
 
