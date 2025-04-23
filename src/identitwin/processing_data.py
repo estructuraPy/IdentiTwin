@@ -205,21 +205,42 @@ def create_displacement_csv(event_data, event_folder, config):
             writer.writerow(header)
             
             # Correct start time to cover pre-event period.
-            start_time = event_data[0]["timestamp"] - timedelta(seconds=config.pre_event_time)
+            if not event_data:
+                logging.warning("No event data provided for displacement CSV creation.")
+                return displacement_file # Return empty file path
+                
+            # Use the timestamp of the first data point as the reference start time (t=0)
+            start_time = event_data[0]["timestamp"] 
             
-            # Write data: use elapsed seconds from corrected start_time
+            rows_to_write = []
+            # Collect data rows: use elapsed seconds from corrected start_time
             for data in event_data:
-                if "lvdt_data" in data["sensor_data"]:
+                # Check if 'sensor_data' and 'lvdt_data' exist and are not empty
+                if "sensor_data" in data and "lvdt_data" in data["sensor_data"] and data["sensor_data"]["lvdt_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    expected_time = (data["timestamp"] - start_time).total_seconds()
+                    # Calculate time relative to the first data point's timestamp
+                    expected_time = (data["timestamp"] - start_time).total_seconds() 
                     row = [timestamp, f"{expected_time:.6f}"]
                     for lvdt in data["sensor_data"]["lvdt_data"]:
-                        row.extend([f"{lvdt['voltage']:.6f}", f"{lvdt['displacement']:.6f}"])
-                    writer.writerow(row)
-                    
+                        # Ensure lvdt dictionary has the required keys
+                        voltage = lvdt.get('voltage', float('nan')) # Use NaN as default if key missing
+                        displacement = lvdt.get('displacement', float('nan'))
+                        row.extend([f"{voltage:.6f}", f"{displacement:.6f}"])
+                    rows_to_write.append(row)
+                else:
+                    # Optionally log missing data or handle differently
+                    logging.debug(f"Skipping data point due to missing LVDT data: {data.get('timestamp')}")
+
+
+            # Write all collected rows at once
+            if rows_to_write:
+                writer.writerows(rows_to_write)
+            else:
+                logging.warning(f"No valid LVDT data found to write to {displacement_file}")
+
         return displacement_file
     except Exception as e:
-        print(f"Error creating displacement CSV: {e}")
+        logging.error(f"Error creating displacement CSV: {e}", exc_info=True) # Log traceback
         return None
 
 def create_acceleration_csv(event_data, event_folder, config):
@@ -237,25 +258,52 @@ def create_acceleration_csv(event_data, event_folder, config):
             writer.writerow(header)
             
             # Correct start time to cover pre-event period.
-            start_time = event_data[0]["timestamp"] - timedelta(seconds=config.pre_event_time)
+            if not event_data:
+                logging.warning("No event data provided for acceleration CSV creation.")
+                return acceleration_file # Return empty file path
+
+            # Use the timestamp of the first data point as the reference start time (t=0)
+            start_time = event_data[0]["timestamp"] 
             
-            # Write data: compute expected_time as elapsed seconds from corrected start_time
+            rows_to_write = []
+            # Collect data rows: compute expected_time as elapsed seconds from corrected start_time
             for data in event_data:
-                if "accel_data" in data["sensor_data"]:
+                 # Check if 'sensor_data' and 'accel_data' exist and are not empty
+                if "sensor_data" in data and "accel_data" in data["sensor_data"] and data["sensor_data"]["accel_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    expected_time = (data["timestamp"] - start_time).total_seconds()
+                    # Calculate time relative to the first data point's timestamp
+                    expected_time = (data["timestamp"] - start_time).total_seconds() 
                     row = [timestamp, f"{expected_time:.6f}"]
                     for accel in data["sensor_data"]["accel_data"]:
-                        magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
+                        # Ensure accel dictionary has the required keys
+                        x = accel.get('x', float('nan')) # Use NaN as default
+                        y = accel.get('y', float('nan'))
+                        z = accel.get('z', float('nan'))
+                        # Calculate magnitude safely, handling potential NaNs
+                        if not (np.isnan(x) or np.isnan(y) or np.isnan(z)):
+                            magnitude = np.sqrt(x**2 + y**2 + z**2)
+                        else:
+                            magnitude = float('nan')
+                            
                         row.extend([
-                            f"{accel['x']:.6f}", 
-                            f"{accel['y']:.6f}", 
-                            f"{accel['z']:.6f}",
+                            f"{x:.6f}", 
+                            f"{y:.6f}", 
+                            f"{z:.6f}",
                             f"{magnitude:.6f}"
                         ])
-                    writer.writerow(row)
-                    
+                    rows_to_write.append(row)
+                else:
+                     # Optionally log missing data or handle differently
+                    logging.debug(f"Skipping data point due to missing Accelerometer data: {data.get('timestamp')}")
+
+
+            # Write all collected rows at once
+            if rows_to_write:
+                writer.writerows(rows_to_write)
+            else:
+                 logging.warning(f"No valid Accelerometer data found to write to {acceleration_file}")
+
         return acceleration_file
     except Exception as e:
-        print(f"Error creating acceleration CSV: {e}")
+        logging.error(f"Error creating acceleration CSV: {e}", exc_info=True) # Log traceback
         return None

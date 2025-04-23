@@ -265,37 +265,28 @@ class EventMonitor:
     def _save_event_data(self, event_data, start_time):
         """Save event data to CSV file and generate plots."""
         try:
-            seen_timestamps = set()
-            processed_data = []
-            # For each data point, compute expected_time as the difference from the first sample’s timestamp
-            for data in event_data:
-                if 'timestamp' not in data:
-                    continue
-                if data['timestamp'] not in seen_timestamps:
-                    seen_timestamps.add(data['timestamp'])
-                    expected_time = (data["timestamp"] - event_data[0]["timestamp"]).total_seconds()
-                    data['expected_time'] = expected_time
-                    processed_data.append(data)
-            if not processed_data:
-                logging.error("No valid data to save")
-                return False
+            # Pass the original event_data directly
+            if not event_data:
+                 logging.error("No event data to save.")
+                 return False
 
             report_file = processing_analysis.save_event_data(
-                event_data=processed_data,
+                event_data=event_data, # Pass original data
                 start_time=start_time,
                 config=self.config
             )
 
             if report_file:
-                current_count = self.event_count_ref[0]
-                state.set_event_variable("event_count", current_count)
-                print(f"Event {current_count} saved successfully to {report_file}")
-                return True
+                current_count = self.event_count_ref[0] # Read current count
+                # Incrementing is handled in _finalize_record_event after successful save
+                # state.set_event_variable("event_count", current_count) # State updated in _finalize_record_event
+                print(f"Event {current_count + 1} data passed for saving. Report: {report_file}") # Log passing data
+                return True # Indicate success passing data
 
-            return False
+            return False # Indicate failure passing data
 
         except Exception as e:
-            logging.error(f"Error saving event data: {e}")
+            logging.error(f"Error preparing event data for saving: {e}") # Changed error message context
             traceback.print_exc()
             return False
 
