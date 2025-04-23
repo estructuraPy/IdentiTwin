@@ -78,8 +78,8 @@ class DummyMPU6050:
         """Simulate accelerometer data with valid values."""
         t = time.time() - self._cycle_start_time
         return {
-                'x': 0.1 * math.sin(t * 10) + 0.15 * math.sin(t * 50),
-                'y': 0.5 * math.cos(t * 20) + 0.1 * math.cos(t * 90),
+                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
+                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
                 'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
         }
 
