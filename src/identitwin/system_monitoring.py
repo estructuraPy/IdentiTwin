@@ -35,12 +35,12 @@ from collections import deque
 from datetime import datetime
 import logging
 import queue
-import matplotlib.pyplot as plt  # Add this import for cleanup
+import matplotlib.pyplot as plt
+import sys
 
 from . import state
 from . import processing_data, processing_analysis
 
-# system_monitoring.py
 class MonitoringSystem:
     """
     System-level monitoring class for the IdentiTwin system.
@@ -62,23 +62,22 @@ class MonitoringSystem:
         """
         self.config = config
         self.running = False
-        self.data_queue = deque(maxlen=1000)  # Queue for storing acquired data
+        self.data_queue = deque(maxlen=50000)
         self.acquisition_thread = None
         self.event_count = 0
         self.sensors_initialized = False
         self.last_status_time = 0
-        self.status_interval = 2.0  # Print status every 2 seconds
+        self.status_interval = 2.0
 
-        # Add performance monitoring variables
+        # Add counters for consecutive I/O errors per accelerometer
+        self.accel_io_error_counts = [0] * (config.num_accelerometers if config.enable_accel else 0)
+        self.accel_io_error_log_threshold = 100 # Log every 100 errors after the first
+
         self.performance_stats = {
-            "accel_timestamps": deque(
-                maxlen=100
-            ),  # Store last 100 acquisition timestamps
-            "lvdt_timestamps": deque(
-                maxlen=100
-            ),  # Store last 100 LVDT timestamps
-            "accel_periods": deque(maxlen=99),  # Store periods between acquisitions
-            "lvdt_periods": deque(maxlen=99),  # Store periods between LVDT readings
+            "accel_timestamps": deque(maxlen=50000),
+            "lvdt_timestamps": deque(maxlen=50000),
+            "accel_periods": deque(maxlen=50000),
+            "lvdt_periods": deque(maxlen=50000),
             "last_accel_time": None,
             "last_lvdt_time": None,
             "sampling_rate_acceleration": 0.0,
@@ -87,7 +86,6 @@ class MonitoringSystem:
             "lvdt_jitter": 0.0,
         }
 
-        # Cache for last valid LVDT readings
         self.last_lvdt_readings = []
         if (
             config.enable_lvdt
@@ -102,31 +100,63 @@ class MonitoringSystem:
         """
         Set up sensors based on the configuration.
         Initializes LVDTs, accelerometers, and LEDs.
-
-        Returns:
-            None
-
-        Assumptions:
-            - The configuration object contains the necessary information to initialize sensors.
+        Relies on configurator methods for object creation.
         """
+        print("\n--- Setting up sensors ---")
+        self.sensors_initialized = False
         try:
-            # Initialize LEDs
+            print("Initializing LEDs...")
             self.status_led, self.activity_led = self.config.initialize_leds()
-
-            # Initialize ADS1115 ADC for LVDTs
-            self.ads = self.config.create_ads1115()
-            if self.ads:
-                self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
+            if self.status_led and self.activity_led:
+                print("LEDs setup successful.")
             else:
-                self.lvdt_channels = None
+                print("LEDs setup failed or skipped.")
 
-            # Initialize accelerometers
-            self.accelerometers = self.config.create_accelerometers()
+            self.ads = None
+            self.lvdt_channels = None
+            if self.config.enable_lvdt:
+                print("Initializing ADS1115 for LVDTs...")
+                self.ads = self.config.create_ads1115()
+                if self.ads:
+                    print("ADS1115 setup successful.")
+                    print("Initializing LVDT channels...")
+                    self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
+                    if self.lvdt_channels:
+                         print(f"LVDT channels setup successful ({len(self.lvdt_channels)} channels).")
+                    else:
+                         print("LVDT channels setup failed.")
+                else:
+                    print("ADS1115 setup failed.")
 
-            self.sensors_initialized = True
+            self.accelerometers = None
+            if self.config.enable_accel:
+                print("Initializing Accelerometers (MPU6050)...")
+                self.accelerometers = self.config.create_accelerometers()
+                if self.accelerometers:
+                    print(f"Accelerometers setup successful ({len(self.accelerometers)} sensors).")
+                else:
+                    print("Accelerometers setup failed.")
+
+            # Final check for successful initialization based on config flags
+            lvdt_ok = (not self.config.enable_lvdt) or (self.config.enable_lvdt and self.lvdt_channels)
+            accel_ok = (not self.config.enable_accel) or (self.config.enable_accel and self.accelerometers)
+
+            if lvdt_ok and accel_ok and (self.lvdt_channels or self.accelerometers):
+                 self.sensors_initialized = True
+                 print("--- Sensor setup completed successfully ---")
+            else:
+                 self.sensors_initialized = False
+                 print("--- Sensor setup failed or incomplete ---", file=sys.stderr)
+                 if self.config.enable_lvdt and not self.lvdt_channels:
+                      print("  Reason: LVDT enabled but channels failed to initialize.", file=sys.stderr)
+                 if self.config.enable_accel and not self.accelerometers:
+                      print("  Reason: Accelerometer enabled but sensors failed to initialize.", file=sys.stderr)
+
         except Exception as e:
-            print(f"Error during sensor setup: {e}")
+            print(f"Fatal error during sensor setup: {e}", file=sys.stderr)
             traceback.print_exc()
+            self.sensors_initialized = False
+            print("--- Sensor setup failed due to unexpected error ---", file=sys.stderr)
 
     def initialize_processing(self):
         """
@@ -140,7 +170,6 @@ class MonitoringSystem:
             - Configuration object is properly initialized and contains necessary parameters
               such as output directory, number of LVDTs/accelerometers, sampling rates, etc.
         """
-        # Create general measurements CSV
         self.csv_file_general = os.path.join(
             self.config.output_dir, "general_measurements.csv"
         )
@@ -151,7 +180,6 @@ class MonitoringSystem:
             else 0,
             filename=self.csv_file_general,
         )
-        # Create LVDT-specific file if enabled
         if self.config.enable_lvdt:
             self.csv_file_displacement = os.path.join(
                 self.config.output_dir, "displacements.csv"
@@ -159,7 +187,6 @@ class MonitoringSystem:
             processing_data.initialize_displacement_csv(
                 filename=self.csv_file_displacement
             )
-        # Create accelerometer-specific file if enabled
         if self.config.enable_accel:
             self.csv_file_acceleration = os.path.join(
                 self.config.output_dir, "acceleration.csv"
@@ -185,55 +212,42 @@ class MonitoringSystem:
             print("Error: Sensors are not initialized. Call setup_sensors() first.")
             return
 
-        # Turn on status LED if available
         if self.status_led:
             try:
                 self.status_led.on()
             except Exception as e:
-                print(f"")
+                print(f"Warning: Could not turn on status LED: {e}")
 
         self.running = True
-        # Start the data acquisition thread
         self.acquisition_thread = threading.Thread(
             target=self._data_acquisition_thread, daemon=True
         )
         self.acquisition_thread.start()
 
-        # Start event monitoring if configured
         if hasattr(self.config, "trigger_acceleration_threshold") or hasattr(
             self.config, "trigger_displacement_threshold"
         ):
-            # Threshold configuration for event detection - modificado para incluir todos los thresholds
             thresholds = {
                 "acceleration": self.config.trigger_acceleration_threshold,
                 "displacement": self.config.trigger_displacement_threshold,
                 "detrigger_acceleration": self.config.detrigger_acceleration_threshold,
                 "detrigger_displacement": self.config.detrigger_displacement_threshold,
-                "pre_event_time": self.config.pre_event_time, # Corrected
-                "post_event_time": self.config.post_event_time, # Corrected
+                "pre_event_time": self.config.pre_event_time,
+                "post_event_time": self.config.post_event_time,
                 "min_event_duration": self.config.min_event_duration,
             }
 
-            # Mutable reference for event count
             event_count_ref = [self.event_count]
 
-            # Create instance of event monitor and connect with the data queue
-            from . import event_monitoring
-
-            self.event_monitor = event_monitoring.EventMonitor(
-                self.config,
-                self.data_queue,
-                thresholds,
-                lambda: self.running,  # Reference to self.running as callable
-                event_count_ref,
+            from .event_monitoring import EventMonitor
+            self.event_monitor = EventMonitor(
+                self.config, self.data_queue, thresholds, self.running, event_count_ref
             )
-
-            # Start the event monitoring thread
             self.event_thread = threading.Thread(
                 target=self.event_monitor.event_monitoring_thread, daemon=True
             )
             self.event_thread.start()
-
+            print("Event monitoring thread started.")
 
     def stop_monitoring(self):
         """
@@ -243,28 +257,33 @@ class MonitoringSystem:
         Returns:
             None
         """
+        print("Stopping monitoring system...")
         self.running = False
 
-        # Wait for threads to finish
         if self.acquisition_thread and self.acquisition_thread.is_alive():
-            self.acquisition_thread.join(timeout=1.0)
+            print("Waiting for acquisition thread to finish...")
+            self.acquisition_thread.join(timeout=2.0)
 
         if (
             hasattr(self, "event_thread")
             and self.event_thread
             and self.event_thread.is_alive()
         ):
-            self.event_thread.join(timeout=1.0)
+            print("Waiting for event thread to finish...")
+            self.event_thread.join(timeout=2.0)
 
-        # Turn off LEDs
         if self.status_led:
-            self.status_led.off()
+            try:
+                self.status_led.off()
+            except Exception as e:
+                print(f"Warning: Could not turn off status LED: {e}")
         if self.activity_led:
-            self.activity_led.off()
+            try:
+                self.activity_led.off()
+            except Exception as e:
+                print(f"Warning: Could not turn off activity LED: {e}")
 
-        # Update event count from reference
         if hasattr(self, "event_monitor"):
-            # Update event count from reference
             self.event_count = self.event_monitor.event_count_ref[0]
 
         print("Monitoring system stopped.")
@@ -278,7 +297,6 @@ class MonitoringSystem:
             None
         """
         self.stop_monitoring()
-        # Use plt.close directly instead of non-existent visualization.close_all_plots
         plt.close("all")
         print("Resources cleaned up.")
 
@@ -290,249 +308,224 @@ class MonitoringSystem:
             None
         """
         try:
-            # Keep waiting while the monitoring thread is active
-            while (
-                self.running
-                and self.acquisition_thread
-                and self.acquisition_thread.is_alive()
-            ):
-                time.sleep(0.1)
+            while self.running:
+                time.sleep(0.5)
         except KeyboardInterrupt:
-            print("\nMonitoring interrupted by user")
+            print("\nKeyboardInterrupt received. Stopping monitoring...")
             self.stop_monitoring()
 
     def _data_acquisition_thread(self):
         """
         Thread for data acquisition from sensors.
-        Collects data from LVDTs and accelerometers and stores it in the queue and CSV files.
-
-        Returns:
-            None
+        Collects raw sensor data (acceleration/displacement) and enqueues for event handling.
+        Applies calibration offsets/slopes from the config object. Handles read errors.
         """
+        if not self.sensors_initialized:
+             print("Error: Data acquisition thread cannot start, sensors not initialized.", file=sys.stderr)
+             return
+
         try:
-            # Initialize timers for precise control
-            start_time = time.perf_counter()
-            next_acquisition_time = start_time
-            next_lvdt_time = start_time
-            next_plot_update_time = start_time
-            last_print_time = start_time
+            accel_rate_target = self.config.sampling_rate_acceleration
+            lvdt_rate_target = self.config.sampling_rate_lvdt
 
-            # Add intervals based on configuration
-            accel_interval = 1.0 / self.config.sampling_rate_acceleration
-            lvdt_interval = 1.0 / self.config.sampling_rate_lvdt
-            plot_update_interval = 1.0 / self.config.plot_refresh_rate
-            stats_interval = 1.0  # Interval for updating statistics (1 second)
+            accel_interval = 1.0 / accel_rate_target if accel_rate_target > 0 else float('inf')
+            lvdt_interval = 1.0 / lvdt_rate_target if lvdt_rate_target > 0 else float('inf')
 
-            # Initialize performance_stats values
-            self.performance_stats["last_accel_time"] = start_time
-            self.performance_stats["last_lvdt_time"] = start_time
+            stats_interval = 1.0
 
-            # Counters for time drift compensation
             accel_sample_count = 0
-            lvdt_sample_count = 0
+            lvdt_sample_count  = 0
+            loop_start_time    = time.perf_counter()
+            next_accel_time    = loop_start_time
+            next_lvdt_time     = loop_start_time
+            last_stats_update_time = loop_start_time
+
+            last_accel_actual_time = None
+            last_lvdt_actual_time = None
+
+            print("\n--- Data acquisition thread started ---")
 
             while self.running:
-                current_time = time.perf_counter()
+                now = time.perf_counter()
+                sensor_data_packet = None
+                data_acquired = False
 
-                # Data structure for this sample
-                # Ensure sensor_data is reset for each loop iteration
-                sensor_data = {"timestamp": datetime.now(), "sensor_data": {}}
-                accel_acquired = False
-                lvdt_acquired = False
+                if self.config.enable_accel and self.accelerometers and now >= next_accel_time:
+                    # Add a mutex or lock for accelerometer access
+                    self.accel_lock = threading.Lock()
+                    with self.accel_lock:
+                        target_accel_time = loop_start_time + accel_sample_count * accel_interval
+                        sleep_needed = target_accel_time - now
+                        if sleep_needed > 0:
+                            self._precise_sleep(sleep_needed)
+                        actual_accel_time = time.perf_counter()
+                        expected_relative_time = accel_sample_count * accel_interval
 
-                # Accelerometer data acquisition - Strict timing control
-                if self.accelerometers and current_time >= next_acquisition_time:
-                    # Precise time for acquisition
-                    sleep_time = next_acquisition_time - current_time
-                    if sleep_time > 0:
-                        self._precise_sleep(sleep_time)
+                        if last_accel_actual_time is not None:
+                            period = actual_accel_time - last_accel_actual_time
+                            self.performance_stats["accel_periods"].append(period)
+                        last_accel_actual_time = actual_accel_time
 
-                    # Recalculate exact time for next acquisition based on sample count
-                    # This avoids cumulative time drift
-                    accel_sample_count += 1
-                    next_acquisition_time = start_time + (
-                        accel_sample_count * accel_interval
+                        accel_data_list = []
+                        for i, accel in enumerate(self.accelerometers):
+                            try:
+                                raw_data = accel.get_accel_data()
+                                # Reset error counter on successful read
+                                if i < len(self.accel_io_error_counts):
+                                    if self.accel_io_error_counts[i] > 0:
+                                        logging.info(f"Accelerometer {i+1} communication restored.")
+                                    self.accel_io_error_counts[i] = 0
+
+                                calibrated_data = raw_data
+                                if i < len(self.config.accel_offsets):
+                                    offsets = self.config.accel_offsets[i]
+                                    if isinstance(offsets, dict):
+                                        scaling_factor = offsets.get('scaling_factor', 1.0)
+                                        calibrated_x = (raw_data['x'] + offsets.get('x', 0.0)) * scaling_factor
+                                        calibrated_y = (raw_data['y'] + offsets.get('y', 0.0)) * scaling_factor
+                                        calibrated_z = (raw_data['z'] + offsets.get('z', 0.0)) * scaling_factor
+                                        calibrated_data = {'x': calibrated_x, 'y': calibrated_y, 'z': calibrated_z}
+                                    else:
+                                        print(f"Warning: Invalid calibration data structure for accelerometer {i+1}. Expected dict, got {type(offsets)}. Using raw data.", file=sys.stderr)
+                                else:
+                                    print(f"Warning: No calibration offset found for accelerometer {i+1}. Using raw data.", file=sys.stderr)
+
+                                mag = np.sqrt(calibrated_data['x']**2 + calibrated_data['y']**2 + calibrated_data['z']**2)
+                                calibrated_data['magnitude'] = mag
+                                accel_data_list.append(calibrated_data)
+
+                            except OSError as read_err:
+                                if read_err.errno == 121: # Specific I/O error
+                                    if i < len(self.accel_io_error_counts):
+                                        self.accel_io_error_counts[i] += 1
+                                        # Log less frequently
+                                        if self.accel_io_error_counts[i] == 1 or \
+                                           self.accel_io_error_counts[i] % self.accel_io_error_log_threshold == 0:
+                                            logging.warning(f"I/O Error reading accelerometer {i+1} (Count: {self.accel_io_error_counts[i]}): {read_err}")
+                                else: # Other OS errors
+                                    logging.warning(f"Failed to read accelerometer {i+1}: {read_err}")
+                                    if i < len(self.accel_io_error_counts): # Reset counter for other errors
+                                        self.accel_io_error_counts[i] = 0
+                                accel_data_list.append({'x': np.nan, 'y': np.nan, 'z': np.nan, 'magnitude': np.nan})
+                            except Exception as e:
+                                logging.error(f"Unexpected error processing accelerometer {i+1}: {e}", exc_info=True)
+                                if i < len(self.accel_io_error_counts): # Reset counter for other errors
+                                    self.accel_io_error_counts[i] = 0
+                                accel_data_list.append({'x': np.nan, 'y': np.nan, 'z': np.nan, 'magnitude': np.nan})
+
+                        timestamp = datetime.now()
+                        sensor_data_packet = {
+                            'timestamp': timestamp,
+                            'expected_relative_time': expected_relative_time,
+                            'sensor_type': 'accel',
+                            'sensor_data': {'accel_data': accel_data_list}
+                        }
+                        accel_sample_count += 1
+                        next_accel_time = loop_start_time + accel_sample_count * accel_interval
+                        data_acquired = True
+
+                elif self.config.enable_lvdt and self.lvdt_channels and now >= next_lvdt_time:
+                    # Check if we're too close to an accelerometer reading
+                    time_since_accel = now - next_accel_time
+                    time_to_next_accel = next_accel_time - now
+                    
+                    # Skip this LVDT reading if too close to accelerometer timing
+                    if min(abs(time_since_accel), abs(time_to_next_accel)) < 0.002:  # 2ms safety margin
+                        continue
+                        
+                    # Add a mutex or lock for LVDT access
+                    self.lvdt_lock = threading.Lock()
+                    with self.lvdt_lock:
+                        lvdt_data_list = []
+                        for i, ch in enumerate(self.lvdt_channels):
+                            try:
+                                # Add delay between channel readings
+                                if i > 0:
+                                    time.sleep(0.001)  # 1ms delay between channels
+                                    
+                                raw_voltage = ch.voltage
+                                
+                                # Get calibration for this LVDT from config
+                                if hasattr(self.config, 'lvdt_calibration') and i < len(self.config.lvdt_calibration):
+                                    calib = self.config.lvdt_calibration[i]
+                                    slope = calib.get('lvdt_slope', 19.86)  
+                                    intercept = calib.get('lvdt_intercept', 0.0)
+                                    
+                                    # Calculate displacement using calibration
+                                    disp = slope * raw_voltage + intercept
+                                    
+                                    lvdt_data_list.append({
+                                        'voltage': raw_voltage,
+                                        'displacement': disp
+                                    })
+                                    
+                                    # Update last valid reading
+                                    if i < len(self.last_lvdt_readings):
+                                        self.last_lvdt_readings[i] = {
+                                            'voltage': raw_voltage,
+                                            'displacement': disp
+                                        }
+                                else:
+                                    print(f"Warning: Missing calibration for LVDT {i+1}")
+                                    lvdt_data_list.append({
+                                        'voltage': raw_voltage,
+                                        'displacement': 0.0
+                                    })
+                                    
+                            except Exception as e:
+                                print(f"Error reading LVDT {i+1}: {str(e)}", file=sys.stderr)
+                                # Use last valid reading if available
+                                if i < len(self.last_lvdt_readings):
+                                    lvdt_data_list.append(self.last_lvdt_readings[i])
+                                else:
+                                    lvdt_data_list.append({'voltage': 0.0, 'displacement': 0.0})
+
+                        timestamp = datetime.now()
+                        sensor_data_packet = {
+                            'timestamp': timestamp,
+                            'expected_relative_time': expected_relative_time,
+                            'sensor_type': 'lvdt',
+                            'sensor_data': {'lvdt_data': lvdt_data_list}
+                        }
+                        lvdt_sample_count += 1
+                        next_lvdt_time = loop_start_time + lvdt_sample_count * lvdt_interval
+                        data_acquired = True
+
+                if sensor_data_packet:
+                    self.data_queue.append(sensor_data_packet)
+                    if self.activity_led:
+                        try:
+                            self.activity_led.blink(on_time=0.01, off_time=0.01, n=1, background=True)
+                        except Exception:
+                            pass
+
+                if now - last_stats_update_time >= stats_interval:
+                    self._update_performance_stats(
+                        self.performance_stats["accel_periods"],
+                        self.performance_stats["lvdt_periods"]
                     )
+                    self._print_status(sensor_data_packet if sensor_data_packet else {})
+                    last_stats_update_time = now
 
-                    # Update performance statistics
-                    current_perf_time = time.perf_counter()
-                    period = current_perf_time - self.performance_stats["last_accel_time"]
+                if not data_acquired:
+                    earliest_next_time = float('inf')
+                    if self.config.enable_accel and accel_interval != float('inf'):
+                        earliest_next_time = min(earliest_next_time, next_accel_time)
+                    if self.config.enable_lvdt and lvdt_interval != float('inf'):
+                        earliest_next_time = min(earliest_next_time, next_lvdt_time)
 
-                    if period > 0:
-                        self.performance_stats["accel_timestamps"].append(
-                            current_perf_time
-                        )
-                        self.performance_stats["accel_periods"].append(period)
-                        self.performance_stats["last_accel_time"] = current_perf_time
-
-                    # Read accelerometer data
-                    accel_data = []
-                    for i, accel in enumerate(self.accelerometers):
-                        try:
-                            data = accel.get_accel_data()
-
-                            # Apply calibration using offset and scaling_factor
-                            if (hasattr(self.config, "accel_offsets") and i < len(self.config.accel_offsets)):
-                                offsets = self.config.accel_offsets[i] # Already are modified with scaling factor
-                                scaling_factor = offsets["scaling_factor"]
-                                data["x"] = (data["x"] + offsets["x"]) * scaling_factor
-                                data["y"] = (data["y"] + offsets["y"]) * scaling_factor
-                                data["z"] = (data["z"] + offsets["z"]) * scaling_factor
-
-                            accel_data.append(data)
-                        except Exception as e:
-                            print(f"Error reading accelerometer {i+1}: {e}")
-                            accel_data.append({"x": 0.0, "y": 0.0, "z": 0.0})
-
-                    if accel_data:  # Check if data was actually read
-                        sensor_data["sensor_data"]["accel_data"] = accel_data
-                        accel_acquired = True
-
-                    # Append accelerometer data to acceleration.csv
-                    if self.config.enable_accel:
-                        with open(self.csv_file_acceleration, mode="a", newline="") as file:
-                            writer = csv.writer(file)
-                            for accel in accel_data:
-                                magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
-                                writer.writerow([
-                                    sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f"),
-                                    accel["x"],
-                                    accel["y"],
-                                    accel["z"],
-                                    magnitude
-                                ])
-
-                # LVDT data acquisition - Similar logic to avoid drift
-                if self.lvdt_channels and current_time >= next_lvdt_time:
-                    # Precise time for acquisition
-                    sleep_time = next_lvdt_time - current_time
-                    if sleep_time > 0:
-                        self._precise_sleep(sleep_time)
-
-                    # Recalculate exact time for next acquisition based on sample count
-                    lvdt_sample_count += 1
-                    next_lvdt_time = start_time + (lvdt_sample_count * lvdt_interval)
-
-                    # Update performance statistics
-                    current_perf_time = time.perf_counter()
-                    period = current_perf_time - self.performance_stats["last_lvdt_time"]
-
-                    if period > 0:
-                        self.performance_stats["lvdt_timestamps"].append(current_perf_time)
-                        self.performance_stats["lvdt_periods"].append(period)
-                        self.performance_stats["last_lvdt_time"] = current_perf_time
-
-                    # Read LVDT data
-                    lvdt_data = []
-                    for i, channel in enumerate(self.lvdt_channels):
-                        try:
-                            voltage = channel.voltage
-                            # Calculate displacement using calibrated parameters
-                            if hasattr(self.config, "lvdt_slope") and hasattr(self.config, "lvdt_intercept"):
-                                displacement = self.config.lvdt_slope * voltage + self.config.lvdt_intercept
-                            else:
-                                print("No LVDT calibration data available")
-                                displacement = 0.0
-                            
-                            lvdt_data.append({
-                                "voltage": voltage,
-                                "displacement": displacement
-                            })
-                            
-                            # Update cache
-                            if i < len(self.last_lvdt_readings):
-                                self.last_lvdt_readings[i] = {
-                                    "voltage": voltage,
-                                    "displacement": displacement
-                                }
-                        except Exception as e:
-                            print(f"Error reading LVDT {i+1}: {e}")
-                            lvdt_data.append({"voltage": 0.0, "displacement": 0.0})
-
-                    if lvdt_data:  # Check if data was actually read
-                        sensor_data["sensor_data"]["lvdt_data"] = lvdt_data
-                        lvdt_acquired = True
-
-                    # Append LVDT data to displacement.csv
-                    if self.config.enable_lvdt:
-                        with open(self.csv_file_displacement, mode="a", newline="") as file:
-                            writer = csv.writer(file)
-                            for lvdt in lvdt_data:
-                                writer.writerow([
-                                    sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f"),
-                                    lvdt["voltage"],
-                                    lvdt["displacement"]
-                                ])
-
-                # Append combined data to general_measurements.csv only if data was acquired
-                if accel_acquired or lvdt_acquired:
-                    with open(self.csv_file_general, mode="a", newline="") as file:
-                        writer = csv.writer(file)
-                        row = [sensor_data["timestamp"].strftime("%Y-%m-%d %H:%M:%S.%f")]
-
-                        # Add LVDT data
-                        if "lvdt_data" in sensor_data["sensor_data"]:
-                            for lvdt in sensor_data["sensor_data"]["lvdt_data"]:
-                                row.extend([lvdt["voltage"], lvdt["displacement"]])
-
-                        # Add accelerometer data
-                        if "accel_data" in sensor_data["sensor_data"]:
-                            for accel in sensor_data["sensor_data"]["accel_data"]:
-                                magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
-                                row.extend([accel["x"], accel["y"], accel["z"], magnitude])
-
-                        writer.writerow(row)
-
-                # Add data to the queue only if there is *any* sensor data in this iteration
-                if sensor_data["sensor_data"]:
-                    try:
-                        # Use append for deque instead of put for Queue
-                        self.data_queue.append(sensor_data)
-                    except Exception:
-                        # If the queue is full, remove the oldest element
-                        if len(self.data_queue) >= self.data_queue.maxlen:
-                            self.data_queue.popleft()
-                            self.data_queue.append(sensor_data)
-
-                # Activity LED
-                if self.activity_led:
-                    self.activity_led.toggle()
-
-                # Update performance statistics periodically
-                if current_time - last_print_time >= stats_interval:
-                    self._update_performance_stats()
-                    self._print_status(sensor_data)
-
-                    # Display tracking info for debugging
-                    sampling_rate_acceleration = self.performance_stats["sampling_rate_acceleration"]
-                    if (
-                        sampling_rate_acceleration < 95.0 or sampling_rate_acceleration > 105.0
-                    ):  # 5% tolerance
-                        drift = abs(
-                            sampling_rate_acceleration - self.config.sampling_rate_acceleration
-                        )
-
-                        # Recalibrate the acquisition interval if the deviation is significant
-                        if drift > 10.0:  # More than 10 Hz offset
-                            # Reset acquisition timers to fix drift
-                            start_time = time.perf_counter()
-                            accel_sample_count = 0
-                            lvdt_sample_count = 0
-                            next_acquisition_time = start_time
-                            next_lvdt_time = start_time
-                            print(
-                                "Resetting acquisition timers to fix drift"
-                            )
-
-                    last_print_time = current_time
-
-                # Small CPU break if we are far ahead
-                if (next_acquisition_time - time.perf_counter()) > 0.001:
-                    time.sleep(0.001)  # 1 microsecond
+                    if earliest_next_time != float('inf'):
+                        sleep_duration = earliest_next_time - time.perf_counter() - 0.001
+                        if sleep_duration > 0.0001:
+                            self._precise_sleep(sleep_duration)
+                    else:
+                        time.sleep(0.01)
 
         except Exception as e:
-            print(f"Error in data acquisition thread: {e}")
+            print(f"Fatal error in data acquisition thread: {e}", file=sys.stderr)
             traceback.print_exc()
+        finally:
+            print("--- Data acquisition thread finished ---")
 
     def _precise_sleep(self, sleep_time):
         """
@@ -547,64 +540,54 @@ class MonitoringSystem:
         if sleep_time <= 0:
             return
 
-        # For very short intervals (< 1ms), use active waiting only
-        if (sleep_time < 0.001):
+        if (sleep_time < 0.001): #
             target = time.perf_counter() + sleep_time
             while time.perf_counter() < target:
                 pass
             return
 
-        # For longer intervals, use a combination
-        # Sleep until near the target time and then active waiting
-        # Leaving 0.5ms for active waiting is sufficient on most systems
         time.sleep(sleep_time - 0.0005)
         target = time.perf_counter() + 0.0005
         while time.perf_counter() < target:
             pass
 
-    def _update_performance_stats(self):
+    def _update_performance_stats(self, recent_accel_periods, recent_lvdt_periods):
         """
-        Calculate performance statistics for sampling rates and jitter.
+        Calculate performance statistics using provided recent periods.
+
+        Args:
+            recent_accel_periods: Deque of recent accelerometer periods.
+            recent_lvdt_periods: Deque of recent LVDT periods.
 
         Returns:
             None
         """
-        # Calculate accelerometer performance
-        if len(self.performance_stats["accel_periods"]) > 1:
-            periods = np.array(self.performance_stats["accel_periods"])
-            mean_period = np.mean(periods)
+        if len(recent_accel_periods) > 1:
+            periods_np = np.array(recent_accel_periods)
+            mean_period = np.mean(periods_np)
+            std_dev_period = np.std(periods_np)
+            self.performance_stats["sampling_rate_acceleration"] = 1.0 / mean_period if mean_period > 0 else 0.0
+            self.performance_stats["accel_jitter"] = std_dev_period * 1000.0
+        else:
+            self.performance_stats["sampling_rate_acceleration"] = 0.0
+            self.performance_stats["accel_jitter"] = 0.0
 
-            # Ensure mean_period is greater than zero to avoid division by zero
-            if mean_period > 0:
-                self.performance_stats["sampling_rate_acceleration"] = 1.0 / mean_period
-                self.performance_stats["accel_jitter"] = (
-                    np.std(periods) * 1000
-                )  # Convert to ms
-            else:
-                self.performance_stats["sampling_rate_acceleration"] = 0
-                self.performance_stats["accel_jitter"] = 0
-
-        # Calculate LVDT performance
-        if len(self.performance_stats["lvdt_periods"]) > 1:
-            periods = np.array(self.performance_stats["lvdt_periods"])
-            mean_period = np.mean(periods)
-
-            # Ensure mean_period is greater than zero to avoid division by zero
-            if mean_period > 0:
-                self.performance_stats["sampling_rate_lvdt"] = 1.0 / mean_period
-                self.performance_stats["lvdt_jitter"] = (
-                    np.std(periods) * 1000
-                )  # Convert to ms
-            else:
-                self.performance_stats["sampling_rate_lvdt"] = 0
-                self.performance_stats["lvdt_jitter"] = 0
+        if len(recent_lvdt_periods) > 1:
+            periods_np = np.array(recent_lvdt_periods)
+            mean_period = np.mean(periods_np)
+            std_dev_period = np.std(periods_np)
+            self.performance_stats["sampling_rate_lvdt"] = 1.0 / mean_period if mean_period > 0 else 0.0
+            self.performance_stats["lvdt_jitter"] = std_dev_period * 1000.0
+        else:
+            self.performance_stats["sampling_rate_lvdt"] = 0.0
+            self.performance_stats["lvdt_jitter"] = 0.0
 
     def _print_status(self, sensor_data):
         """
         Print current system status information.
 
         Args:
-            sensor_data: A dictionary containing sensor data.
+            sensor_data: A dictionary containing sensor data from the latest acquisition.
 
         Returns:
             None
@@ -612,86 +595,72 @@ class MonitoringSystem:
         print("\n============================ System Status Update =============================\n")
         print(f"Time: {datetime.now().strftime('%H:%M:%S')}")
 
-        # Print performance stats
         print("Performance:")
         if self.config.enable_accel:
-            print(
-                f"  Accel Rate: {self.performance_stats['sampling_rate_acceleration']:.2f} Hz (Target: {self.config.sampling_rate_acceleration:.1f} Hz)"
-            )
-            print(
-                f"  Accel Jitter: {self.performance_stats['accel_jitter']:.2f} ms"
-            )
+            accel_rate_measured = self.performance_stats.get("sampling_rate_acceleration", 0.0)
+            accel_jitter_measured = self.performance_stats.get("accel_jitter", 0.0)
+            print(f"  Accel Rate: {accel_rate_measured:.2f} Hz (Target: {self.config.sampling_rate_acceleration:.1f} Hz)")
+            print(f"  Accel Jitter: {accel_jitter_measured:.2f} ms")
 
         if self.config.enable_lvdt:
-            print(
-                f"  LVDT Rate: {self.performance_stats['sampling_rate_lvdt']:.2f} Hz (Target: {self.config.sampling_rate_lvdt:.1f} Hz)"
-            )
-            print(
-                f"  LVDT Jitter: {self.performance_stats['lvdt_jitter']:.2f} ms"
-            )
+            lvdt_rate_measured = self.performance_stats.get("sampling_rate_lvdt", 0.0)
+            lvdt_jitter_measured = self.performance_stats.get("lvdt_jitter", 0.0)
+            print(f"  LVDT Rate: {lvdt_rate_measured:.2f} Hz (Target: {self.config.sampling_rate_lvdt:.1f} Hz)")
+            print(f"  LVDT Jitter: {lvdt_jitter_measured:.2f} ms")
 
-        # Print LVDT status
         if self.config.enable_lvdt:
-            print("\nLVDT Status:\n")
-            lvdt_data = sensor_data.get("sensor_data", {}).get("lvdt_data", [])
-            if lvdt_data:  # If we have current data
-                for i, lvdt in enumerate(lvdt_data):
-                    print(
-                        f"  LVDT{i+1}: {lvdt['displacement']:.3f}mm ({lvdt['voltage']:.3f}V)"
-                    )
-            else:  # Use cached data if no current data
-                for i, reading in enumerate(self.last_lvdt_readings):
-                    print(
-                        f"  LVDT{i+1}: {reading['displacement']:.3f}mm ({reading['voltage']:.3f}V)"
-                    )
+            print("\nLVDT Status:")
+            for i, reading in enumerate(self.last_lvdt_readings):
+                disp = reading.get('displacement', float('nan'))
+                volt = reading.get('voltage', float('nan'))
+                print(f"  LVDT{i+1}: {disp:.3f}mm ({volt:.3f}V)")
 
-        # Print accelerometer status
         if self.config.enable_accel:
-            print("\nAccelerometer Status:\n")
-            accel_data = sensor_data.get("sensor_data", {}).get("accel_data", [])
-            if accel_data:
-                for i, accel in enumerate(accel_data):
-                    magnitude = np.sqrt(accel["x"] ** 2 + accel["y"] ** 2 + accel["z"] ** 2)
-                    print(
-                        f"  Accel{i+1}: {magnitude:.3f} [X:{accel['x']:.3f}, Y:{accel['y']:.3f}, Z:{accel['z']:.3f}]"
-                    )
+            print("\nAccelerometer Status:")
+            # Get accel data from current sensor_data if available
+            accel_list = []
+            if sensor_data and "sensor_data" in sensor_data:
+                accel_list = sensor_data.get("sensor_data", {}).get("accel_data", [])
+                
+            if accel_list:
+                for i, accel in enumerate(accel_list):
+                    x = accel.get('x', float('nan'))
+                    y = accel.get('y', float('nan'))
+                    z = accel.get('z', float('nan'))
+                    mag = accel.get('magnitude', float('nan'))
+                    print(f"  Accel{i+1}: X={x:.3f} Y={y:.3f} Z={z:.3f} (Mag: {mag:.3f}) m/s²")
             else:
-                print("  No accelerometer data available")
+                # Check if accelerometers are initialized but no data
+                if hasattr(self, 'accelerometers') and self.accelerometers:
+                    print("  No current accelerometer data (waiting for next reading)")
+                else:
+                    print("  No accelerometer data available (sensors not initialized)")
 
-        # Get event count from both state and monitor
         event_count = self.event_monitor.event_count_ref[0] if hasattr(self, 'event_monitor') else 0
         state_event_count = state.get_event_variable("event_count", 0)
-        
-        # Use the higher of the two counts to ensure we don't miss any
+
         current_event_count = max(event_count, state_event_count)
         print(f"\nEvents detected: {current_event_count}")
-        
-        # Resync counts if they differ
-        if event_count != state_event_count:
-            state.set_event_variable("event_count", current_event_count)
-            if hasattr(self, 'event_monitor'):
-                self.event_monitor.event_count_ref[0] = current_event_count
 
-        # Print event count and monitoring status
+        if event_count != state_event_count:
+            state.set_event_variable("event_count", event_count)
+
         is_recording = state.get_event_variable("is_event_recording", False)
         formatted_time = "Not recording"
         if is_recording:
-            last_trigger_time = state.get_event_variable("last_trigger_time")
-            if last_trigger_time:
-                elapsed = time.time() - last_trigger_time
-                formatted_time = self._format_elapsed_time(elapsed)
+            last_trigger = state.get_event_variable("last_trigger_time", 0)
+            if last_trigger > 0:
+                elapsed = time.time() - last_trigger
+                formatted_time = f"Recording event... ({elapsed:.1f}s elapsed)"
         print(f"Recording Status: {formatted_time}")
 
-        # Fix format specifier error and use consistent names
         if hasattr(self, "event_monitor"):
-            if hasattr(self.event_monitor, "moving_avg_accel"):
-                print(f"Acceleration Moving Average: {self.event_monitor.moving_avg_accel:.3f} (detrigger: {self.config.detrigger_acceleration_threshold:.3f}m/s2)")
-            else:
-                print(f"Acceleration Moving Average: N/A (detrigger: {self.config.detrigger_acceleration_threshold:.3f}m/s2)")
-            if hasattr(self.event_monitor, "moving_avg_disp"):
-                print(f"Displacement Moving Average: {self.event_monitor.moving_avg_disp:.3f} (detrigger: {self.config.detrigger_displacement_threshold:.3f}mm)")
-            else:
-                print(f"Displacement Moving Average: N/A (detrigger: {self.config.detrigger_displacement_threshold:.3f}mm)")
+            avg_accel = self.event_monitor.moving_avg_accel
+            avg_disp = self.event_monitor.moving_avg_disp
+            detrig_accel = self.config.detrigger_acceleration_threshold
+            detrig_disp = self.config.detrigger_displacement_threshold
+            print(f"Acceleration Moving Average: {avg_accel:.3f} (detrigger: {detrig_accel:.3f}m/s²)")
+            print(f"Displacement Moving Average: {avg_disp:.3f} (detrigger: {detrig_disp:.3f}mm)")
 
         print("\n===============================================================================")
         print("====================== `Ctrl + C` to finish monitoring ========================\n \n")
@@ -718,13 +687,3 @@ class MonitoringSystem:
             return f"{minutes}m {seconds}s"
         else:
             return f"{seconds}s"
-
-def process_accelerometer_data(data, offsets, scaling_factor):
-    """Process accelerometer data."""
-    try:
-        data["x"] = (data["x"] + offsets["x"]) * scaling_factor
-        data["y"] = (data["y"] + offsets["y"]) * scaling_factor
-        data["z"] = (data["z"] + offsets["z"]) * scaling_factor
-    except Exception as e:
-        print(f"Warning: Error processing accelerometer data: {e}")
-        data["x"], data["y"], data["z"] = 0.0, 0.0, 0.0  # Reset to default values
