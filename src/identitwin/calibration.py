@@ -45,6 +45,15 @@ def initialize_lvdt(channels, slopes=None, config=None):
             slope = slopes[i] if slopes else 19.86
             lvdt_system = zeroing_lvdt(channel, slope, label=f"LVDT-{i+1}")
             lvdt_systems.append(lvdt_system)
+            
+            # Store calibration in config object
+            if config:
+                if not hasattr(config, 'lvdt_calibration'):
+                    config.lvdt_calibration = []
+                while len(config.lvdt_calibration) <= i:
+                    config.lvdt_calibration.append({})
+                config.lvdt_calibration[i] = lvdt_system.copy()
+                
         except Exception as e:
             print(f"Error calibrating LVDT-{i+1}: {e}")
             raise
