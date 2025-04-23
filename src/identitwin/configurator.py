@@ -23,37 +23,55 @@ Classes:
 """
 import os
 import platform
-from datetime import datetime
-import time
-import numpy as np
 import sys # Import sys for stderr
+import time
 import traceback # Import traceback for detailed errors
+from datetime import datetime
 
-# Check if we're running on a Raspberry Pi or similar platform
+import numpy as np
+
+# Conditional hardware imports
+LED = None
+ADS = None
+board = None
+busio = None
+AnalogIn = None
+mpu6050 = None
+
 try:
     # Only import hardware-specific modules if we're on a compatible platform
-    from gpiozero import LED
-    import adafruit_ads1x15.ads1115 as ADS
-    import board
+    import board # Needs to be imported first for busio
+    print("board imported successfully. Hardware functions enabled")
     import busio
+    print("busion imported successfully. Hardware functions enabled")
+    from gpiozero import LED
+    print("gpiozero  imported successfully. Hardware functions enabled")
+    import adafruit_ads1x15.ads1115 as ADS
+    print("adafruit_ads1x15 imported successfully. Hardware functions enabled")
     from adafruit_ads1x15.analog_in import AnalogIn
+    print("adafruit_ads1x15.analog_in imported successfully. Hardware functions enabled")
     # Import the specific mpu6050 library used in the working example
     from mpu6050 import mpu6050
-    I2C_AVAILABLE = True
-except (ImportError, NotImplementedError) as e:
+    print("mpu6050 imported successfully. Hardware functions enabled")
+except (ImportError, NotImplementedError, RuntimeError) as e:
     # For simulation mode or if hardware libs fail
-    print(f"Warning: Hardware libraries not found or failed to import ({e}). Hardware functions disabled.")
+    print(f"Warning: Hardware libraries not found or failed to import ({e}). Running in simulation mode or hardware functions disabled.")
+    # Ensure all hardware-related variables are None if import fails
     LED = None
+    print("LED set to None")
     ADS = None
+    print("ADS set to None")
     board = None
+    print("board set to None")
     busio = None
+    print("busio set to None")
     AnalogIn = None
+    print("AnalogIn set to None")
     mpu6050 = None
-    I2C_AVAILABLE = False
+    print("mpu6050 set to None")
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
-print("Hardware detection: Raspberry Pi/Hardware Mode")
 
 
 class SystemConfig:
@@ -241,7 +259,7 @@ class SystemConfig:
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
-        if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
+        if busio is None or board is None or ADS is None:
             print("Error: Cannot create ADS1115, required hardware libraries (busio, board, ADS) not available.", file=sys.stderr)
             return None
         try:
@@ -273,7 +291,7 @@ class SystemConfig:
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
-        if ads is None or not I2C_AVAILABLE or AnalogIn is None: # Check dependencies
+        if ads is None or AnalogIn is None: # Check dependencies
              print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
              return None
         try:
@@ -305,7 +323,7 @@ class SystemConfig:
 
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
-        if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
+        if mpu6050 is None or board is None or busio is None:
             print("Error: Cannot create accelerometers, required hardware libraries (mpu6050, busio, board) not available.", file=sys.stderr)
             return None
 
