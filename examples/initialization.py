@@ -36,7 +36,7 @@ from identitwin import calibration
 from identitwin import report_generator
 
 # Default values for sampling rates and thresholds.
-ACCEL_SAMPLING_RATE = 100.0  # Hz
+ACCEL_SAMPLING_RATE = 200.0  # Hz
 LVDT_SAMPLING_RATE = 5.0  # Hz
 PLOT_REFRESH_RATE = 10.0  # Hz
 
