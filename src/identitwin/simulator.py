@@ -73,14 +73,26 @@ class DummyMPU6050:
     def __init__(self, addr):
         self.addr = addr
         self._cycle_start_time = time.time()
+        
+    def get_temp(self):
+        """Simulate temperature reading."""
+        return 25.0  # Return constant temperature for simulation
 
     def get_accel_data(self):
-        """Simulate accelerometer data with valid values."""
+        """Simulate accelerometer data with time-varying values."""
         t = time.time() - self._cycle_start_time
+        # Generate more realistic simulated data
+        freq1, freq2 = 2.0, 5.0  # Hz
+        amp1, amp2 = 0.2, 0.1    # m/s²
+        
+        x = amp1 * np.sin(2 * np.pi * freq1 * t)
+        y = amp2 * np.sin(2 * np.pi * freq2 * t)
+        z = -9.81 + 0.1 * np.sin(2 * np.pi * 1.5 * t)  # Simulate vertical orientation with small oscillation
+        
         return {
-                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
-                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
-                'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
+            'x': x,
+            'y': y,
+            'z': z
         }
 
         
@@ -154,6 +166,10 @@ class SimulatorConfig:
         self.lvdt_scale_factor = 0.1875
         self.lvdt_slope = 19.86
         self.lvdt_intercept = 0.0
+
+        # Add missing attributes to match SystemConfig
+        self.lvdt_calibration = []  # Add this line to match SystemConfig
+        self.lvdt_pin_config = [0, 1]  # Simulated pins
         
         # Configuración del acelerómetro (valores dummy)
         self.accel_offsets = [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(self.num_accelerometers)]
@@ -188,11 +204,17 @@ class SimulatorConfig:
     def create_lvdt_channels(self, ads):
         """Create dummy LVDT channels using a cyclic mapping (simulation)."""
         channels = []
-        # Uso de 4 "canales" dummy para simular ADS1115
-        dummy_channel_list = [0, 1, 2, 3]
+        # Use configured pin mapping or default to [0, 1]
+        dummy_channel_list = self.lvdt_pin_config
         for i in range(self.num_lvdts):
             ch = dummy_channel_list[i % len(dummy_channel_list)]
-            channels.append(DummyAnalogIn(ads, ch))
+            channel = DummyAnalogIn(ads, ch, slope=self.lvdt_slope, intercept=self.lvdt_intercept)
+            self.lvdt_calibration.append({
+                'lvdt_slope': self.lvdt_slope,
+                'lvdt_intercept': self.lvdt_intercept,
+                'initial_voltage': channel.voltage
+            })
+            channels.append(channel)
         return channels
 
     def create_accelerometers(self):
