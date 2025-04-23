@@ -19,36 +19,48 @@ import numpy as np
 
 
 def initialize_lvdt(channels, slopes=None, config=None):
-    """
-    Initializes LVDT systems with calibration parameters.
-
-    Args:
-        channels: List of LVDT channel objects with a 'voltage' attribute.
-        slopes: List of slopes (mm/V) for each LVDT. Defaults to 19.86 mm/V if not provided.
-        config: System configuration object for saving calibration data.
-
-    Returns:
-        List of dictionaries, each containing 'lvdt_slope' and 'lvdt_intercept'.
-
-    Assumptions:
-        - Each channel object in 'channels' has a 'voltage' attribute representing the current voltage reading.
-        - LVDT slopes are provided in mm/V, and the intercept is calculated in mm.
-    """
+    """Initializes LVDT systems with calibration parameters."""
     if not channels or not isinstance(channels, list):
         raise ValueError("Invalid channels input.")
 
     lvdt_systems = []
-    print("Calibrating LVDTs", flush=True)
-
+    print("\nStarting LVDT calibration...")
+    
     for i, channel in enumerate(channels):
         try:
-            slope = slopes[i] if slopes else 19.86
-            lvdt_system = zeroing_lvdt(channel, slope, label=f"LVDT-{i+1}")
-            lvdt_systems.append(lvdt_system)
+            # Ensure we use the correct slope for each LVDT
+            slope = slopes[i] if slopes and i < len(slopes) else 19.86
+            voltage = channel.voltage
+            intercept = -slope * voltage
+            
+            # Create calibration dictionary specific for this LVDT
+            calibration = {
+                'lvdt_slope': slope,
+                'lvdt_intercept': intercept,
+                'initial_voltage': voltage  # Store initial voltage for reference
+            }
+            
+            print(f"\nLVDT-{i+1}:")
+            print(f"  Initial voltage: {voltage:.6f}V")
+            print(f"  Slope: {slope:.4f} mm/V")
+            print(f"  Intercept: {intercept:.4f} mm")
+            lvdt_systems.append(calibration)
+            
+            # Ensure each LVDT has its own calibration in config
+            if config and hasattr(config, 'lvdt_calibration'):
+                while len(config.lvdt_calibration) <= i:
+                    config.lvdt_calibration.append({})
+                config.lvdt_calibration[i] = calibration.copy()  # Use copy() to avoid shared references
+                
+            # Immediate verification
+            test_disp = slope * voltage + intercept
+            print(f"  Verification: {test_disp:.4f}mm (should be close to 0)")
+
         except Exception as e:
             print(f"Error calibrating LVDT-{i+1}: {e}")
             raise
 
+    print("\nLVDT calibration completed.")
     if config:
         _save_calibration_data(config, lvdt_systems=lvdt_systems)
 
