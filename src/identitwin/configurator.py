@@ -275,31 +275,24 @@ class SystemConfig:
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
-        if ads is None or not I2C_AVAILABLE or AnalogIn is None: # Check dependencies
-             print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
-             return None
+        if ads is None or not I2C_AVAILABLE or AnalogIn is None:
+            print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
+            return None
         try:
             channels = []
-            # Map ADS pins
-            channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
+            # Usar configuración de pines dinámica
+            pin_config = getattr(self, 'lvdt_pin_config', [ADS.P0, ADS.P1, ADS.P2, ADS.P3])
             print(f"Attempting to create {self.num_lvdts} LVDT channels...")
-            for i in range(self.num_lvdts):
-                if i >= len(channel_map):
-                    print(f"Warning: More LVDTs requested ({self.num_lvdts}) than available ADS pins ({len(channel_map)}). Stopping channel creation.", file=sys.stderr)
-                    break
-                ch_pin = channel_map[i]
-                # Create AnalogIn object for the specific pin
+            
+            for i in range(min(self.num_lvdts, len(pin_config))):
+                ch_pin = pin_config[i]
+                print(f"  Creating LVDT channel {i+1} on configured pin")
                 channel = AnalogIn(ads, ch_pin)
-                # The AnalogIn object from adafruit_ads1x15 already has a 'voltage' property.
-                # The lambda function is not needed.
                 channels.append(channel)
-                print(f"  LVDT channel {i+1} created on pin {ch_pin}.")
-            print(f"Successfully created {len(channels)} LVDT channel objects.")
+                    
+            print(f"Successfully created {len(channels)} LVDT channels")
             return channels
-        except NameError as e:
-             # Error if ADS or AnalogIn weren't imported correctly
-             print(f"Error: Missing hardware library component ({e}). Cannot create LVDT channels.", file=sys.stderr)
-             return None
+
         except Exception as e:
             print(f"Error creating LVDT channels: {e}", file=sys.stderr)
             traceback.print_exc()

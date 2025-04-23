@@ -36,12 +36,12 @@ from identitwin import calibration
 from identitwin import report_generator
 
 # Default values for sampling rates and thresholds.
-ACCEL_SAMPLING_RATE = 200.0  # Hz
+ACCEL_SAMPLING_RATE = 100.0  # Hz
 LVDT_SAMPLING_RATE = 5.0  # Hz
 PLOT_REFRESH_RATE = 10.0  # Hz
 
-NUM_LVDTS = 1
-NUM_ACCELS = 2
+NUM_LVDTS = 2
+NUM_ACCELS = 4
 LVDT_SLOPES = [19.86, 19.85]
 
 ACCEL_TRIGGER_THRESHOLD = 0.981  # m/s^2 (0.1g)
@@ -239,6 +239,11 @@ def create_system_config():
         post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION
     )
+    
+    # Configuración específica de los pines LVDT
+    import adafruit_ads1x15.ads1115 as ADS
+    config.lvdt_pin_config = [ADS.P0, ADS.P1]  # Asignar pines específicos para LVDTs
+    
     return config
 
 
