@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import logging
 from collections import deque
 from datetime import datetime
+import threading
 
 from . import state
 from .processing_data import read_lvdt_data
@@ -170,65 +171,60 @@ class EventMonitor:
     def _handle_event_recording(self, sensor_data, current_time):
         """Handle ongoing event recording and check for completion."""
         try:
-            # Append new data point during recording
+            # Append nueva muestra en memoria
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
-            
-            # Check if post-trigger duration has passed since the last trigger time
-            if current_time - self.last_trigger_time > post_trigger_time:
-                # Wait a short fixed duration (e.g., 0.5 seconds) to capture additional post-event data
-                wait_duration = 0.5
-                print(f"Post-event period met; waiting an extra {wait_duration:.1f} seconds for post-event data...")
-                time.sleep(wait_duration)
-                
-                # Drain any additional samples from the queue collected during the extra wait,
-                # provided their timestamp is within the wait_period from the last recorded sample.
-                if self.current_event_data:
-                    last_timestamp = self.current_event_data[-1]["timestamp"]
-                    while len(self.data_queue) > 0:
-                        next_data = self.data_queue.popleft()
-                        # Calculate time difference using total_seconds()
-                        time_diff = (next_data["timestamp"] - last_timestamp).total_seconds()
-                        if time_diff < wait_duration:
-                            self.current_event_data.append(next_data)
-                            last_timestamp = next_data["timestamp"]
-                        else:
-                            # If sample is too far out, push it back and break
-                            self.data_queue.appendleft(next_data)
-                            break
-                
-                # Finalize event recording
-                event_samples = len(self.current_event_data) - self.pre_trigger_buffer.maxlen
-                event_duration = event_samples * self.config.time_step_acceleration
-                min_duration = self.thresholds.get("min_event_duration", 2.0)
-                
-                if event_duration >= min_duration:
-                    try:
-                        print(f"Finalizing event with {len(self.current_event_data)} total samples")
-                        complete_event_data = list(self.current_event_data)
-                        event_time = complete_event_data[0]["timestamp"]
-                        self._save_event_data(complete_event_data, event_time)
-                        self.event_count_ref[0] += 1
-                        state.set_event_variable("event_count", self.event_count_ref[0])
-                        total_recorded_duration = len(complete_event_data) * self.config.time_step_acceleration
-                        print(f"Event complete - total duration={total_recorded_duration:.2f}s (including pre/post event data)")
-                    except Exception as e:
-                        logging.error(f"Error saving event: {e}")
-                        traceback.print_exc()
-                else:
-                    print(f"Event too short ({event_duration:.2f}s), discarding.")
 
-                # Reset event state regardless of duration check
+            # Comprueba si terminó el período post-evento
+            if current_time - self.last_trigger_time > post_trigger_time:
+                # Copiar datos en buffer local para hilos
+                data_to_save = list(self.current_event_data)
+                start_ts = data_to_save[0]["timestamp"]
+
+                # Iniciar hilo de fondo para guardar y plotear
+                threading.Thread(
+                    target=self._finalize_record_event,
+                    args=(data_to_save, start_ts),
+                    daemon=True
+                ).start()
+
+                # Resetear estado inmediatamente y seguir adquiriendo
                 self.in_event_recording = False
                 self.current_event_data = []
-                # Keep pre_trigger_buffer intact for next potential event
                 state.set_event_variable("is_event_recording", False)
-            
+
             return True
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
             traceback.print_exc()
             return False
+
+    def _finalize_record_event(self, complete_event_data, start_time):
+        """Hilo de fondo que espera el post_event_time y luego guarda datos y plots."""
+        try:
+            # Pequeño margen extra tras post_event_time
+            time.sleep(0.5)
+
+            # Drenar muestras adicionales recientes
+            last_ts = complete_event_data[-1]["timestamp"]
+            while True:
+                try:
+                    nxt = self.data_queue.popleft()
+                except IndexError:
+                    break
+                dt = (nxt["timestamp"] - last_ts).total_seconds()
+                if dt < 0.5:
+                    complete_event_data.append(nxt)
+                    last_ts = nxt["timestamp"]
+                else:
+                    self.data_queue.appendleft(nxt)
+                    break
+
+            # Guardar y generar informes/gráficas
+            self._save_event_data(complete_event_data, start_time)
+        except Exception as e:
+            logging.error(f"Error in background finalize: {e}")
+            traceback.print_exc()
 
     def event_monitoring_thread(self):
         """Thread function for monitoring events."""
