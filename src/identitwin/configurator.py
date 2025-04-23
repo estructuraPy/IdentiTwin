@@ -158,8 +158,8 @@ class SystemConfig:
         self.lvdt_scale_factor = 0.1875  # Constant for voltage conversion (mV)
         self.lvdt_slope = 19.86  # Default slope in mm/V
         self.lvdt_intercept = 0.0  # Default intercept
-        self.lvdt_calibration = []  # Lista para calibraciones individuales
-        self.lvdt_pin_config = []   # Lista para configuración de pines
+        # *** NUEVO: Inicializar la lista para almacenar resultados de calibración ***
+        self.lvdt_calibration = []
 
         # Accelerometer configuration (from initialization.py)
         self.accel_offsets = [
@@ -275,31 +275,31 @@ class SystemConfig:
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
-        if ads is None or not I2C_AVAILABLE or AnalogIn is None:
-            print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
-            return None
+        if ads is None or not I2C_AVAILABLE or AnalogIn is None: # Check dependencies
+             print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
+             return None
         try:
             channels = []
-            # Map ADS pins and use pin_config if available
+            # Map ADS pins
             channel_map = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
-            pin_config = self.lvdt_pin_config if self.lvdt_pin_config else channel_map[:2]
-            
             print(f"Attempting to create {self.num_lvdts} LVDT channels...")
-            for i in range(min(self.num_lvdts, len(pin_config))):
-                ch_pin = pin_config[i]
-                print(f"  Creating LVDT channel {i+1} on pin {ch_pin}")
-                try:
-                    channel = AnalogIn(ads, ch_pin)
-                    test_voltage = channel.voltage
-                    print(f"  LVDT {i+1} initial voltage reading: {test_voltage:.6f}V")
-                    channels.append(channel)
-                except Exception as e:
-                    print(f"Error creating LVDT channel {i+1}: {e}", file=sys.stderr)
-                    return None
-
-            print(f"Successfully created {len(channels)} LVDT channels")
+            for i in range(self.num_lvdts):
+                if i >= len(channel_map):
+                    print(f"Warning: More LVDTs requested ({self.num_lvdts}) than available ADS pins ({len(channel_map)}). Stopping channel creation.", file=sys.stderr)
+                    break
+                ch_pin = channel_map[i]
+                # Create AnalogIn object for the specific pin
+                channel = AnalogIn(ads, ch_pin)
+                # The AnalogIn object from adafruit_ads1x15 already has a 'voltage' property.
+                # The lambda function is not needed.
+                channels.append(channel)
+                print(f"  LVDT channel {i+1} created on pin {ch_pin}.")
+            print(f"Successfully created {len(channels)} LVDT channel objects.")
             return channels
-
+        except NameError as e:
+             # Error if ADS or AnalogIn weren't imported correctly
+             print(f"Error: Missing hardware library component ({e}). Cannot create LVDT channels.", file=sys.stderr)
+             return None
         except Exception as e:
             print(f"Error creating LVDT channels: {e}", file=sys.stderr)
             traceback.print_exc()
@@ -360,7 +360,7 @@ def ads1115():
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS.ADS1115(i2c)
-        ads.gain = 2.0 / 3.0  # Gain can be adjusted as needed
+        ads.gain = 2.0 / 3.0  # Se puede ajustar el gain según sea necesario
         return ads
     except Exception as e:
         print(f"Error initializing ADS1115: {e}")

@@ -339,17 +339,11 @@ def main():
 
         if config.enable_lvdt and monitor_system.lvdt_channels:
             print("Calibrating LVDTs...")
-            calibration.initialize_lvdt(
-                channels=monitor_system.lvdt_channels,
-                slopes=LVDT_SLOPES,
-                config=config
-            )
-            
-            # Verificar calibración después de inicializar
-            for i, cal in enumerate(config.lvdt_calibration):
-                print(f"\nVerificación LVDT {i+1}:")
-                print(f"Slope: {cal.get('lvdt_slope', 'No calibrado')}")
-                print(f"Intercept: {cal.get('lvdt_intercept', 'No calibrado')}")
+            calibration.initialize_lvdt(channels=monitor_system.lvdt_channels,
+                                         slopes=LVDT_SLOPES,
+                                         config=config)
+        else:
+            print("LVDT calibration skipped (disabled or channels not available).")
 
         if config.enable_accel and monitor_system.accelerometers:
             print("Calibrating accelerometers...")
