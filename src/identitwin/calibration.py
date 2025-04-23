@@ -146,13 +146,39 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
 
 
 def calibrate_accelerometer(data, offsets):
-    """Calibrate accelerometer data."""
-    magnitude = np.sqrt(data["x"]**2 + data["y"]**2 + data["z"]**2)
-    if magnitude == 0:
-        print("Warning: Accelerometer magnitude is zero. Skipping scaling factor calculation.")
-        scaling_factor = 1.0  # Default scaling factor to avoid division by zero
-    else:
-        scaling_factor = GRAVITY / magnitude
+    """
+    Calibrate accelerometer data using offsets and scaling factor.
+    
+    Args:
+        data: Dictionary containing x, y, z acceleration values.
+        offsets: Dictionary containing x, y, z offset values and scaling_factor.
+        
+    Returns:
+        Dictionary with calibrated x, y, z values.
+    """
+    try:
+        # Make a copy of the input data to avoid modifying the original
+        calibrated_data = data.copy()
+        
+        # Validate input data
+        if not all(k in data for k in ['x', 'y', 'z']):
+            raise ValueError("Missing acceleration components in input data")
+            
+        if not all(k in offsets for k in ['x', 'y', 'z', 'scaling_factor']):
+            raise ValueError("Missing calibration parameters")
+            
+        # Apply calibration - using provided scaling factor
+        scaling_factor = offsets["scaling_factor"]
+        calibrated_data["x"] = (data["x"] + offsets["x"]) * scaling_factor
+        calibrated_data["y"] = (data["y"] + offsets["y"]) * scaling_factor
+        calibrated_data["z"] = (data["z"] + offsets["z"]) * scaling_factor
+        
+        return calibrated_data
+        
+    except Exception as e:
+        print(f"Warning: Error in accelerometer calibration: {e}")
+        # Return zero values on error to avoid crashes
+        return {"x": 0.0, "y": 0.0, "z": 0.0}
 
 
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):

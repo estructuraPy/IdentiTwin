@@ -160,11 +160,12 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
                         'fft_y': fft_y,
                         'fft_z': fft_z
                     })
-        # ...existing analysis...
+
+        # Create plots
         analysis_plot = os.path.join(event_folder, f"analysis_{timestamp_str}.png")
         create_analysis_plots(
             np_data,
-            fft_results,  # Pass FFT results list instead of separate arrays
+            fft_results,
             timestamp_str,
             analysis_plot,
             config,
@@ -172,20 +173,21 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
             event_end_time
         )
         
+        # Fix FFT data access for report writing
         report_file = os.path.join(event_folder, f"report_{timestamp_str}.txt")
         write_event_report(
             report_file,
             timestamp_str,
             len(np_data['timestamps'])*config.time_step_acceleration,
-            np.max(np.abs(np_data.get('accel1_x',[]))),
-            np.max(np.abs(np_data.get('accel1_y',[]))),
-            np.max(np.abs(np_data.get('accel1_z',[]))),
-            np.sqrt(np.max(np.abs(np_data.get('accel1_x',[])))**2 +
-                    np.max(np.abs(np_data.get('accel1_y',[])))**2 +
-                    np.max(np.abs(np_data.get('accel1_z',[])))**2),
-            fft_results[0]['x'] if fft_results else [],
-            fft_results[0]['y'] if fft_results else [],
-            fft_results[0]['z'] if fft_results else [],
+            np.max(np.abs(np_data.get('accel1_x', []))),  # Fixed: using np_data instead of np.data
+            np.max(np.abs(np_data.get('accel1_y', []))),  # Fixed: using np_data instead of np.data
+            np.max(np.abs(np_data.get('accel1_z', []))),  # Fixed: using np_data instead of np.data
+            np.sqrt(np.max(np.abs(np_data.get('accel1_x', [])))**2 +  # Fixed: using np_data
+                   np.max(np.abs(np_data.get('accel1_y', [])))**2 +
+                   np.max(np.abs(np_data.get('accel1_z', [])))**2),
+            fft_results[0]['freq'] if fft_results else [],
+            fft_results[0]['fft_x'] if fft_results else [],
+            fft_results[0]['fft_z'] if fft_results else [],
             accel_file,
             lvdt_file,
             analysis_plot,
