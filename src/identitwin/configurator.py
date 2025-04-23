@@ -23,102 +23,37 @@ Classes:
 """
 import os
 import platform
-import sys # Import sys for stderr
-import time
-import traceback # Import traceback for detailed errors
 from datetime import datetime
-
+import time
 import numpy as np
+import sys # Import sys for stderr
+import traceback # Import traceback for detailed errors
 
-# Conditional hardware imports
-LED = None
-ADS = None
-board = None
-busio = None
-AnalogIn = None
-mpu6050 = None
-
-_hardware_import_success = True # Flag to track overall success
-
+# Check if we're running on a Raspberry Pi or similar platform
 try:
-    # Try importing libraries one by one to pinpoint errors
-    try:
-        import board # Needs to be imported first for busio
-    except Exception as e:
-        print(f"Error importing 'board': {e}", file=sys.stderr)
-        traceback.print_exc()
-        board = None
-        _hardware_import_success = False # Critical failure
-
-    if _hardware_import_success: # Only proceed if board imported
-        try:
-            import busio
-        except Exception as e:
-            print(f"Error importing 'busio': {e}", file=sys.stderr)
-            traceback.print_exc()
-            busio = None
-            _hardware_import_success = False # Critical failure
-
-    # Non-critical imports (allow others to potentially succeed)
-    try:
-        from gpiozero import LED
-    except Exception as e:
-        print(f"Error importing 'gpiozero.LED': {e}", file=sys.stderr)
-        traceback.print_exc()
-        LED = None
-
-    try:
-        import adafruit_ads1x15.ads1115 as ADS
-    except Exception as e:
-        print(f"Error importing 'adafruit_ads1x15.ads1115': {e}", file=sys.stderr)
-        traceback.print_exc()
-        ADS = None
-
-    if ADS: # AnalogIn depends on ADS
-        try:
-            from adafruit_ads1x15.analog_in import AnalogIn
-        except Exception as e:
-            print(f"Error importing 'adafruit_ads1x15.analog_in.AnalogIn': {e}", file=sys.stderr)
-            traceback.print_exc()
-            AnalogIn = None
-    else:
-         AnalogIn = None # Ensure it's None if ADS failed
-
-    try:
-        # Import the specific mpu6050 library used in the working example
-        from mpu6050 import mpu6050
-    except Exception as e:
-        print(f"Error importing 'mpu6050': {e}", file=sys.stderr)
-        traceback.print_exc()
-        mpu6050 = None
-
-    if _hardware_import_success and all([LED, ADS, AnalogIn, mpu6050, board, busio]):
-         print("All hardware libraries loaded successfully. Hardware functions should be available.")
-    else:
-         print("Warning: One or more hardware libraries failed to import. Hardware functions may be limited or unavailable. Check errors above.", file=sys.stderr)
-         # Ensure all are None if any critical part failed or specific ones failed
-         if not _hardware_import_success:
-             busio = None # Redundant but safe
-             # Keep others as they were set in individual except blocks
-         if not board: busio = None # busio depends on board
-         if not ADS: AnalogIn = None # AnalogIn depends on ADS
-
-
-except Exception as e: # Catch any unexpected error during the import block itself
-    print(f"Unexpected error during hardware library import phase: {e}", file=sys.stderr)
-    traceback.print_exc()
-    # Ensure all hardware variables are None in case of unexpected failure
+    # Only import hardware-specific modules if we're on a compatible platform
+    from gpiozero import LED
+    import adafruit_ads1x15.ads1115 as ADS
+    import board
+    import busio
+    from adafruit_ads1x15.analog_in import AnalogIn
+    # Import the specific mpu6050 library used in the working example
+    from mpu6050 import mpu6050
+    I2C_AVAILABLE = True
+except (ImportError, NotImplementedError) as e:
+    # For simulation mode or if hardware libs fail
+    print(f"Warning: Hardware libraries not found or failed to import ({e}). Hardware functions disabled.")
     LED = None
     ADS = None
     board = None
     busio = None
     AnalogIn = None
     mpu6050 = None
-    print("All hardware variables set to None due to unexpected import error.", file=sys.stderr)
-
+    I2C_AVAILABLE = False
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
+print("Hardware detection: Raspberry Pi/Hardware Mode")
 
 
 class SystemConfig:
@@ -306,7 +241,7 @@ class SystemConfig:
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
-        if busio is None or board is None or ADS is None:
+        if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
             print("Error: Cannot create ADS1115, required hardware libraries (busio, board, ADS) not available.", file=sys.stderr)
             return None
         try:
@@ -338,7 +273,7 @@ class SystemConfig:
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
-        if ads is None or AnalogIn is None: # Check dependencies
+        if ads is None or not I2C_AVAILABLE or AnalogIn is None: # Check dependencies
              print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
              return None
         try:
@@ -370,7 +305,7 @@ class SystemConfig:
 
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
-        if mpu6050 is None or board is None or busio is None:
+        if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
             print("Error: Cannot create accelerometers, required hardware libraries (mpu6050, busio, board) not available.", file=sys.stderr)
             return None
 
@@ -384,7 +319,6 @@ class SystemConfig:
                 # Instantiate mpu6050 directly with the address, like the example
                 print(f"  Attempting to initialize MPU6050 at address {hex(addr)}...")
                 mpu = mpu6050(addr)
-                time.sleep(0.05) # Add a small delay (50ms) after instantiation
 
                 # Optional: Add a quick check to see if the sensor is responsive
                 try:
@@ -393,7 +327,7 @@ class SystemConfig:
                     mpu_list.append(mpu)
                 except OSError as comm_err:
                     # This error often means the device is not present or responding at this address
-                    print(f"  Warning: Could not communicate with MPU6050 at address {hex(addr)} immediately after initialization: {comm_err}. Skipping this sensor.", file=sys.stderr) # Modified message slightly
+                    print(f"  Warning: Could not communicate with MPU6050 at address {hex(addr)} after initialization: {comm_err}. Skipping this sensor.", file=sys.stderr)
                     continue # Skip this sensor
 
             except NameError as e:

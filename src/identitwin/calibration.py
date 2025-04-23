@@ -16,7 +16,6 @@ import time
 import os
 from datetime import datetime
 import numpy as np
-import logging
 
 
 def initialize_lvdt(channels, slopes=None, config=None):
@@ -177,7 +176,7 @@ def calibrate_accelerometer(data, offsets):
         return calibrated_data
         
     except Exception as e:
-        logging.warning(f"Error in accelerometer calibration: {e}")
+        print(f"Warning: Error in accelerometer calibration: {e}")
         # Return zero values on error to avoid crashes
         return {"x": 0.0, "y": 0.0, "z": 0.0}
 
