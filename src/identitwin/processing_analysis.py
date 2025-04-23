@@ -271,16 +271,16 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_y']), 'g', label='Y', alpha=0.8)
                 ax_time.plot(t_main, np.ma.masked_invalid(np_data[f'accel{accel_idx+1}_z']), 'b', label='Z', alpha=0.8)
                 
-                ax_time.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
-                ax_time.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='Event End')
+                ax_time.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Start')
+                ax_time.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='End')
 
                 if hasattr(config, 'trigger_acceleration_threshold'):
                     trigger_threshold_accel = config.trigger_acceleration_threshold
-                    ax_time.axhline(y=trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8, label='Trigger Threshold (Accel)')
+                    ax_time.axhline(y=trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8, label='Trigger')
                     ax_time.axhline(y=-trigger_threshold_accel, color='orange', linestyle=':', alpha=0.8)
                 if hasattr(config, 'detrigger_acceleration_threshold'):
                     detrigger_threshold_accel = config.detrigger_acceleration_threshold
-                    ax_time.axhline(y=detrigger_threshold_accel, color='purple', linestyle=':', alpha=0.8, label='Detrigger Threshold (Accel)')
+                    ax_time.axhline(y=detrigger_threshold_accel, color='purple', linestyle=':', alpha=0.8, label='Detrigger')
                     ax_time.axhline(y=-detrigger_threshold_accel, color='purple', linestyle=':', alpha=0.8)
 
                 ax_time.set_xlabel('Time (s)')
@@ -350,17 +350,17 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                         
                 if plotted_lvdt:
                     # Draw vertical lines at the actual event boundaries 
-                    ax.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Event Start')
-                    ax.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='Event End')
+                    ax.axvline(x=actual_event_start, color='k', linestyle='--', alpha=0.7, label='Start')
+                    ax.axvline(x=actual_event_end, color='m', linestyle='--', alpha=0.7, label='End')
 
                     # Líneas horizontales para thresholds de trigger y detrigger (desplazamientos)
                     if hasattr(config, 'trigger_displacement_threshold'):
                         trigger_threshold_disp = config.trigger_displacement_threshold
-                        ax.axhline(y=trigger_threshold_disp, color='orange', linestyle=':', alpha=0.8, label='Trigger Threshold (Disp)')
+                        ax.axhline(y=trigger_threshold_disp, color='orange', linestyle=':', alpha=0.8, label='Trigger')
                         ax.axhline(y=-trigger_threshold_disp, color='orange', linestyle=':', alpha=0.8)
                     if hasattr(config, 'detrigger_displacement_threshold'):
                         detrigger_threshold_disp = config.detrigger_displacement_threshold
-                        ax.axhline(y=detrigger_threshold_disp, color='purple', linestyle=':', alpha=0.8, label='Detrigger Threshold (Disp)')
+                        ax.axhline(y=detrigger_threshold_disp, color='purple', linestyle=':', alpha=0.8, label='Detrigger')
                         ax.axhline(y=-detrigger_threshold_disp, color='purple', linestyle=':', alpha=0.8)
 
                     ax.set_xlabel('Time (s)')
