@@ -74,15 +74,31 @@ class EventMonitor:
         
         self.in_event_recording = False
         self.current_event_data = []
-        # Calculate pre_trigger_buffer size based on config
-        pre_trigger_samples = int(config.pre_event_time / config.time_step_acceleration) # Corrected
-        self.pre_trigger_buffer = deque(maxlen=pre_trigger_samples) 
+        # Calculate pre_trigger_buffer size based on MEASURED config rate
+        # Ensure sampling rate is positive before calculating buffer size
+        accel_rate = config.sampling_rate_acceleration
+        if accel_rate <= 0:
+            print("Warning: Accelerometer sampling rate is zero or negative. Using default pre-trigger buffer size.")
+            pre_trigger_samples = 1000 # Default size if rate is invalid
+        else:
+            pre_trigger_samples = int(config.pre_event_time * accel_rate) # Use measured rate
+
+        self.pre_trigger_buffer = deque(maxlen=pre_trigger_samples)
         self.last_trigger_time = 0
-        
-        # Initialize moving averages with deque buffers
-        window_size = int(0.5 * config.sampling_rate_acceleration)  # 0.5 segundos de muestras
-        self.accel_buffer = deque(maxlen=200)
-        self.disp_buffer = deque(maxlen=10)
+
+        # Initialize moving averages with deque buffers based on MEASURED rate
+        if accel_rate > 0:
+             window_size_accel = int(0.5 * accel_rate) # 0.5 seconds of samples
+        else:
+             window_size_accel = 100 # Default if rate invalid
+        lvdt_rate = config.sampling_rate_lvdt
+        if lvdt_rate > 0:
+             window_size_lvdt = int(0.5 * lvdt_rate)
+        else:
+             window_size_lvdt = 5 # Default if rate invalid
+
+        self.accel_buffer = deque(maxlen=max(1, window_size_accel)) # Ensure maxlen >= 1
+        self.disp_buffer = deque(maxlen=max(1, window_size_lvdt)) # Ensure maxlen >= 1
         self.moving_avg_accel = 0.0
         self.moving_avg_disp = 0.0
 
@@ -328,7 +344,15 @@ class EventMonitor:
         try:
             # Calculate expected timestamps based on acceleration rate
             sample_count = len(timestamps)
-            relative_timestamps = [i * self.config.time_step_acceleration for i in range(sample_count)]
+            # Use the MEASURED acceleration rate from config
+            accel_rate = self.config.sampling_rate_acceleration
+            if accel_rate > 0:
+                time_step = 1.0 / accel_rate
+                relative_timestamps = [i * time_step for i in range(sample_count)]
+            else:
+                logging.warning("Cannot calculate relative timestamps due to invalid acceleration rate.")
+                relative_timestamps = list(range(sample_count)) # Fallback to sample index
+
 
             # Use a thread-safe approach without pyplot
             from matplotlib.figure import Figure

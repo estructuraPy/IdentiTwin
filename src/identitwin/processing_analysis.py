@@ -40,29 +40,40 @@ def calculate_fft(data, sampling_rate):
     Returns:
         Tuple (frequencies, fft_x, fft_y, fft_z)
     """
+    # Ensure sampling_rate is positive
+    if sampling_rate <= 0:
+        print(f"Warning: Invalid sampling rate ({sampling_rate}) for FFT calculation. Returning empty results.")
+        return np.array([]), np.array([]), np.array([]), np.array([])
+
     # Find the next power of 2 length
-    n = max(len(data['x']), len(data['y']), len(data['z']))
+    n = max(len(data.get('x', [])), len(data.get('y', [])), len(data.get('z', []))) # Safer access
+    if n == 0:
+        print("Warning: No data provided for FFT calculation.")
+        return np.array([]), np.array([]), np.array([]), np.array([])
+
     n_fft = 2**int(np.ceil(np.log2(n)))
-    
+
     # Create Hanning window of appropriate length
     window = np.hanning(n_fft)
-    
+
     # Process each axis
     fft_results = {}
     for axis in ['x', 'y', 'z']:
+        axis_data = data.get(axis, []) # Safer access
         # Zero pad data to n_fft length
         padded_data = np.zeros(n_fft)
-        padded_data[:len(data[axis])] = data[axis]
-        
+        padded_data[:len(axis_data)] = axis_data
+
         # Apply window and calculate FFT
         windowed_data = padded_data * window
         fft_result = np.fft.rfft(windowed_data)
-        fft_magnitude = np.abs(fft_result) * 2.0 / n_fft
+        # Normalize FFT magnitude correctly
+        fft_magnitude = np.abs(fft_result) * 2.0 / np.sum(window) # Correct normalization using window sum
         fft_results[axis] = fft_magnitude
-    
+
     # Calculate frequency array (same for all axes)
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sampling_rate)
-    
+
     return freqs, fft_results['x'], fft_results['y'], fft_results['z']
 
 def calculate_rms(data):
@@ -142,24 +153,28 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
         # Process each available accelerometer separately.
         fft_results = []  # List to store FFT results per accelerometer
         if config.enable_accel:
-            sampling_rate = 1.0 / config.time_step_acceleration
-            for accel_idx in range(config.num_accelerometers):
-                key_x = f'accel{accel_idx+1}_x'
-                key_y = f'accel{accel_idx+1}_y'
-                key_z = f'accel{accel_idx+1}_z'
-                if key_x in np_data and key_y in np_data and key_z in np_data:
-                    accel_data = {
-                        'x': np_data[key_x],
-                        'y': np_data[key_y],
-                        'z': np_data[key_z]
-                    }
-                    freqs, fft_x, fft_y, fft_z = calculate_fft(accel_data, sampling_rate)
-                    fft_results.append({
-                        'freq': freqs,
-                        'fft_x': fft_x,
-                        'fft_y': fft_y,
-                        'fft_z': fft_z
-                    })
+            # Use the MEASURED sampling rate from config
+            sampling_rate = config.sampling_rate_acceleration
+            if sampling_rate <= 0:
+                 print("Warning: Accelerometer sampling rate is zero or negative. Skipping FFT.")
+            else:
+                for accel_idx in range(config.num_accelerometers):
+                    key_x = f'accel{accel_idx+1}_x'
+                    key_y = f'accel{accel_idx+1}_y'
+                    key_z = f'accel{accel_idx+1}_z'
+                    if key_x in np_data and key_y in np_data and key_z in np_data:
+                        accel_data = {
+                            'x': np_data[key_x],
+                            'y': np_data[key_y],
+                            'z': np_data[key_z]
+                        }
+                        freqs, fft_x, fft_y, fft_z = calculate_fft(accel_data, sampling_rate)
+                        fft_results.append({
+                            'freq': freqs,
+                            'fft_x': fft_x,
+                            'fft_y': fft_y,
+                            'fft_z': fft_z
+                        })
 
         # Create plots
         analysis_plot = os.path.join(event_folder, f"analysis_{timestamp_str}.png")
@@ -175,19 +190,28 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
         
         # Fix FFT data access for report writing
         report_file = os.path.join(event_folder, f"report_{timestamp_str}.txt")
+        # Calculate duration based on measured time step if available, else use timestamps
+        duration = (np_data['timestamps'][-1] - np_data['timestamps'][0]) if 'timestamps' in np_data and len(np_data['timestamps']) > 1 else 0.0
+
+        # Find dominant frequencies for the report (using first accelerometer's FFT results if available)
+        dominant_freqs_x, dominant_freqs_y, dominant_freqs_z = [], [], []
+        if fft_results:
+            freqs = fft_results[0]['freq']
+            dominant_freqs_x = find_dominant_frequencies(fft_results[0]['fft_x'], freqs)
+            dominant_freqs_y = find_dominant_frequencies(fft_results[0]['fft_y'], freqs)
+            dominant_freqs_z = find_dominant_frequencies(fft_results[0]['fft_z'], freqs)
+
         write_event_report(
             report_file,
             timestamp_str,
-            len(np_data['timestamps'])*config.time_step_acceleration,
-            np.max(np.abs(np_data.get('accel1_x', []))),  # Fixed: using np_data instead of np.data
-            np.max(np.abs(np_data.get('accel1_y', []))),  # Fixed: using np_data instead of np.data
-            np.max(np.abs(np_data.get('accel1_z', []))),  # Fixed: using np_data instead of np.data
-            np.sqrt(np.max(np.abs(np_data.get('accel1_x', [])))**2 +  # Fixed: using np_data
-                   np.max(np.abs(np_data.get('accel1_y', [])))**2 +
-                   np.max(np.abs(np_data.get('accel1_z', [])))**2),
-            fft_results[0]['freq'] if fft_results else [],
-            fft_results[0]['fft_x'] if fft_results else [],
-            fft_results[0]['fft_z'] if fft_results else [],
+            duration, # Use calculated duration
+            np.nanmax(np.abs(np_data.get(f'accel1_x', [np.nan]))), # Use nanmax for safety
+            np.nanmax(np.abs(np_data.get(f'accel1_y', [np.nan]))),
+            np.nanmax(np.abs(np_data.get(f'accel1_z', [np.nan]))),
+            np.nanmax(np.abs(np_data.get(f'accel1_mag', [np.nan]))), # Use magnitude if available
+            dominant_freqs_x, # Pass dominant frequencies
+            dominant_freqs_y,
+            dominant_freqs_z,
             accel_file,
             lvdt_file,
             analysis_plot,
@@ -389,7 +413,6 @@ def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z
             f.write(f"FREQUENCY ANALYSIS:\n")
             f.write(f"  Dominant X frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_x])}\n")
             f.write(f"  Dominant Y frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_y])}\n")
-            # Fixed typo here: use np_data.get instead of np.data.get
             f.write(f"  Dominant Z frequencies: {', '.join([f'{f:.2f} Hz' for f in freqs_z])}\n\n")
         
         # LVDT section - only if enabled and data provided
@@ -430,10 +453,14 @@ def generate_fft_plot(np_data, fs, filename_template, config):
                 continue  # Skip if data for this accelerometer is missing
 
             accel_data = {
-                'x': np_data[x_key],
-                'y': np_data[y_key],
-                'z': np_data[z_key]
+                'x': np.nan_to_num(np_data[x_key]), # Replace NaN with 0 for FFT
+                'y': np.nan_to_num(np_data[y_key]),
+                'z': np.nan_to_num(np_data[z_key])
             }
+            # Use the measured sampling rate (fs)
+            if fs <= 0:
+                 print(f"Warning: Skipping FFT for Accel {accel_idx} due to invalid sampling rate ({fs}).")
+                 continue
             freq, fft_x, fft_y, fft_z = calculate_fft(accel_data, fs)
             
             fig, axes = plt.subplots(3, 1, figsize=(10, 12))
