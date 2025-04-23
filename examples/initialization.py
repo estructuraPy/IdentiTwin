@@ -432,6 +432,9 @@ def main():
         post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION
     )
+    # keep originals for printouts
+    config.expected_sampling_rate_acceleration = config.sampling_rate_acceleration
+    config.expected_sampling_rate_lvdt        = config.sampling_rate_lvdt
 
     print(f"Operation: {get_operation_mode_name()}")
     print("\nSensor Configuration:")
