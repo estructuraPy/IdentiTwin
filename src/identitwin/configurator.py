@@ -244,55 +244,51 @@ class SystemConfig:
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
         if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
-            print("Error: Cannot create ADS1115, required hardware libraries (busio, board, ADS) not available.", file=sys.stderr)
+            print("Error: Cannot create ADS1115, required hardware libraries not available.", file=sys.stderr)
             return None
         try:
-            # Initialize I2C bus directly here
-            i2c = busio.I2C(board.SCL, board.SDA)
+            # Initialize I2C bus with higher clock speed
+            i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)  # 400 kHz
             print("I2C bus initialized successfully for ADS1115.")
-            # Create ADS object using the initialized bus
+            
             ads = ADS.ADS1115(i2c)
-            ads.gain = self.lvdt_gain  # Set gain as configured
-            print("ADS1115 object created successfully.")
+            ads.mode = 0 # Continuous conversion mode
+            ads.data_rate = 860 # Highest data rate
+            ads.gain = self.lvdt_gain
+            print("ADS1115 object created and configured successfully.")
             return ads
-        except ValueError as e:
-            # Specific error for I2C initialization failure (e.g., no device found)
-            print(f"Error initializing I2C bus for ADS1115: {e}. Check connections/config.", file=sys.stderr)
-            return None
-        except RuntimeError as e:
-            # Specific error often related to permissions or kernel modules
-            print(f"Error initializing I2C bus for ADS1115: {e}. Ensure I2C is enabled and permissions are correct.", file=sys.stderr)
-            return None
-        except NameError as e:
-             # Error if libraries weren't imported correctly
-             print(f"Error: Missing hardware library component ({e}). Cannot create ADS1115.", file=sys.stderr)
-             return None
         except Exception as e:
-            # Catch other potential errors (like OSError if device address is wrong/busy)
-            print(f"Unexpected error initializing ADS1115: {e}", file=sys.stderr)
+            print(f"Error initializing ADS1115: {e}", file=sys.stderr)
             traceback.print_exc()
             return None
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
         if ads is None or not I2C_AVAILABLE or AnalogIn is None:
-            print("Error: Cannot create LVDT channels, ADS1115 object is invalid or AnalogIn library not available.", file=sys.stderr)
+            print("Error: Cannot create LVDT channels.", file=sys.stderr)
             return None
         try:
             channels = []
-            # Usar configuración de pines dinámica
-            pin_config = getattr(self, 'lvdt_pin_config', [ADS.P0, ADS.P1, ADS.P2, ADS.P3])
-            print(f"Attempting to create {self.num_lvdts} LVDT channels...")
+            # Set specific pin configurations
+            lvdt_config = [
+                {'pin': ADS.P0, 'slope': 19.86, 'intercept': 0.0},  # LVDT 1
+                {'pin': ADS.P1, 'slope': 19.86, 'intercept': 0.0}   # LVDT 2
+            ]
             
-            for i in range(min(self.num_lvdts, len(pin_config))):
-                ch_pin = pin_config[i]
-                print(f"  Creating LVDT channel {i+1} on configured pin")
-                channel = AnalogIn(ads, ch_pin)
-                channels.append(channel)
+            for i, cfg in enumerate(lvdt_config[:self.num_lvdts]):
+                print(f"Configuring LVDT {i+1} on pin {cfg['pin']}")
+                try:
+                    channel = AnalogIn(ads, cfg['pin'])
+                    # Test reading
+                    _ = channel.voltage
+                    channels.append(channel)
+                    print(f"LVDT {i+1} initialized successfully")
+                except Exception as ch_err:
+                    print(f"Error initializing LVDT {i+1}: {ch_err}")
+                    continue
                     
-            print(f"Successfully created {len(channels)} LVDT channels")
-            return channels
-
+            return channels if channels else None
+            
         except Exception as e:
             print(f"Error creating LVDT channels: {e}", file=sys.stderr)
             traceback.print_exc()
