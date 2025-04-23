@@ -158,6 +158,8 @@ class SystemConfig:
         self.lvdt_scale_factor = 0.1875  # Constant for voltage conversion (mV)
         self.lvdt_slope = 19.86  # Default slope in mm/V
         self.lvdt_intercept = 0.0  # Default intercept
+        # *** NUEVO: Inicializar la lista para almacenar resultados de calibración ***
+        self.lvdt_calibration = []
 
         # Accelerometer configuration (from initialization.py)
         self.accel_offsets = [
