@@ -227,10 +227,12 @@ class SystemConfig:
 
     def initialize_leds(self):
         """Initialize LED indicators for Raspberry Pi hardware."""
+        global LED  # Explicitly declare LED as global to avoid UnboundLocalError
+        
         # Check specifically if the LED class from gpiozero was imported successfully
         if LED is None:
             print("Warning: Cannot initialize LEDs, 'gpiozero' library not available or failed to import.")
-            return NonFunctionalLED(self.gpio_pins[0]), NonFunctionalLED(self.gpio_pins[1])
+            return None, None  # Return None to indicate failure
         # Check if GPIO pins are configured
         if not self.gpio_pins or len(self.gpio_pins) < 2:
              print("Warning: Cannot initialize LEDs, GPIO pins not configured correctly.")
@@ -348,7 +350,7 @@ class SystemConfig:
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
         if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
-            print("Error: Cannot create accelerometers, required hardware libraries (mpu6050, busio, board) not available.", file=sys.stderr)
+            print("Error: Cannot create accelerometers, required hardware libraries not available.", file=sys.stderr)
             return None
 
         mpu_list = []

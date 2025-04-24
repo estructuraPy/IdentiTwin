@@ -115,7 +115,6 @@ class MonitoringSystem:
         """
         Set up sensors based on the configuration.
         Initializes LVDTs, accelerometers, and LEDs.
-        Relies on configurator methods for object creation.
         """
         print("\n--- Setting up sensors ---")
         self.sensors_initialized = False
@@ -127,49 +126,34 @@ class MonitoringSystem:
             else:
                 print("LEDs setup failed or skipped.")
 
-            self.ads = None
-            self.lvdt_channels = None
-            if self.config.enable_lvdt:
-                print("Initializing LVDTs...")
-                self.ads = self.config.create_ads1115()
-                if self.ads:
-                    self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
-                    if self.lvdt_channels:
-                         print(f"LVDT channels setup successful ({len(self.lvdt_channels)} sensors).")
-                    else:
-                         print("LVDT channels setup failed.")
+            print("\nInitializing LVDTs...")
+            self.ads = self.config.create_ads1115()
+            if self.ads:
+                self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
+                if self.lvdt_channels:
+                    print(f"LVDT channels setup successful ({len(self.lvdt_channels)} sensors).")
                 else:
-                    print("ADS1115 setup failed.")
-
-            self.accelerometers = None
-            if self.config.enable_accel:
-                print("Initializing Accelerometers...")
-                self.accelerometers = self.config.create_accelerometers()
-                if self.accelerometers:
-                    print(f"\nAccelerometers setup successful ({len(self.accelerometers)} sensors).")
-                else:
-                    print("Accelerometers setup failed.")
-
-            # Final check for successful initialization based on config flags
-            lvdt_ok = (not self.config.enable_lvdt) or (self.config.enable_lvdt and self.lvdt_channels)
-            accel_ok = (not self.config.enable_accel) or (self.config.enable_accel and self.accelerometers)
-
-            if lvdt_ok and accel_ok and (self.lvdt_channels or self.accelerometers):
-                 self.sensors_initialized = True
-                 print("\n--- Sensor setup completed successfully ---")
+                    print("LVDT channels setup failed.")
             else:
-                 self.sensors_initialized = False
-                 print("--- Sensor setup failed or incomplete ---", file=sys.stderr)
-                 if self.config.enable_lvdt and not self.lvdt_channels:
-                      print("  Reason: LVDT enabled but channels failed to initialize.", file=sys.stderr)
-                 if self.config.enable_accel and not self.accelerometers:
-                      print("  Reason: Accelerometer enabled but sensors failed to initialize.", file=sys.stderr)
+                print("ADS1115 setup failed.")
+
+            print("\nInitializing Accelerometers...")
+            self.accelerometers = self.config.create_accelerometers()
+            if self.accelerometers:
+                print(f"Accelerometers setup successful ({len(self.accelerometers)} sensors).")
+            else:
+                print("Accelerometers setup failed.")
+
+            if (self.lvdt_channels or not self.config.enable_lvdt) and (self.accelerometers or not self.config.enable_accel):
+                self.sensors_initialized = True
+                print("\n--- Sensor setup completed successfully ---")
+            else:
+                print("--- Sensor setup failed ---", file=sys.stderr)
 
         except Exception as e:
             print(f"Fatal error during sensor setup: {e}", file=sys.stderr)
             traceback.print_exc()
             self.sensors_initialized = False
-            print("--- Sensor setup failed due to unexpected error ---", file=sys.stderr)
 
     def initialize_processing(self):
         """
