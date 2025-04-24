@@ -40,6 +40,7 @@ import sys
 
 from . import state
 from . import processing_data, processing_analysis
+from . import calibration
 
 class MonitoringSystem:
     """
@@ -111,49 +112,65 @@ class MonitoringSystem:
             'buffer_max_age': 0.5  # Maximum age of data in seconds
         }
 
+        self.lvdt_calibration = []  # Lista para almacenar calibración de LVDTs
+
     def setup_sensors(self):
         """
-        Set up sensors based on the configuration.
-        Initializes LVDTs, accelerometers, and LEDs.
+        Initializes and configures the sensors (LVDTs and accelerometers).
         """
-        print("\n--- Setting up sensors ---")
-        self.sensors_initialized = False
+        print("\n========================= Setting up sensors =========================\n")
         try:
-            print("\nInitializing LEDs...")
-            self.status_led, self.activity_led = self.config.initialize_leds()
-            if self.status_led and self.activity_led:
-                print("LEDs setup successful.")
-            else:
-                print("LEDs setup failed or skipped.")
-
-            print("\nInitializing LVDTs...")
-            self.ads = self.config.create_ads1115()
-            if self.ads:
-                self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
-                if self.lvdt_channels:
-                    print(f"LVDT channels setup successful ({len(self.lvdt_channels)} sensors).")
+            # Initialize LVDT-related components
+            if self.config.enable_lvdt:
+                print("\nSetting up LVDTs...")
+                self.ads = self.config.create_ads1115()
+                if self.ads:
+                    self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
+                    if self.lvdt_channels:
+                        print("LVDT channels initialized successfully.")
+                        # Calibrate LVDTs
+                        slopes = [19.86, 21.86][:len(self.lvdt_channels)]
+                        self.lvdt_calibration = calibration.initialize_lvdt(
+                            channels=self.lvdt_channels,
+                            slopes=slopes
+                        )
+                        print("LVDT calibration complete.")
+                    else:
+                        print("Failed to initialize LVDT channels.")
                 else:
-                    print("LVDT channels setup failed.")
+                    print("Failed to create ADS1115 object.")
             else:
-                print("ADS1115 setup failed.")
+                print("LVDT setup skipped (disabled in configuration).")
 
-            print("\nInitializing Accelerometers...")
-            self.accelerometers = self.config.create_accelerometers()
-            if self.accelerometers:
-                print(f"Accelerometers setup successful ({len(self.accelerometers)} sensors).")
+            # Initialize accelerometer-related components
+            if self.config.enable_accel:
+                print("\nSetting up Accelerometers...")
+                self.accelerometers = self.config.create_accelerometers()
+                if self.accelerometers:
+                    print("Accelerometers initialized successfully.")
+                    # Calibrate accelerometers
+                    accel_offsets = calibration.multiple_accelerometers(
+                        mpu_list=self.accelerometers,
+                        calibration_time=2.0,
+                        config=self.config
+                    )
+                    if accel_offsets:
+                        self.config.accel_offsets = accel_offsets
+                        print("Accelerometer calibration complete.")
+                    else:
+                        print("Accelerometer calibration failed.")
+                else:
+                    print("Failed to initialize accelerometers.")
             else:
-                print("Accelerometers setup failed.")
+                print("Accelerometer setup skipped (disabled in configuration).")
 
-            if (self.lvdt_channels or not self.config.enable_lvdt) and (self.accelerometers or not self.config.enable_accel):
-                self.sensors_initialized = True
-                print("\n--- Sensor setup completed successfully ---")
-            else:
-                print("--- Sensor setup failed ---", file=sys.stderr)
+            print("\n--- Sensor setup completed successfully ---\n")
+            self.sensors_initialized = True  # Set sensors_initialized to True after successful setup
 
         except Exception as e:
-            print(f"Fatal error during sensor setup: {e}", file=sys.stderr)
+            print(f"\nError setting up sensors: {e}\n")
             traceback.print_exc()
-            self.sensors_initialized = False
+            raise
 
     def initialize_processing(self):
         """
@@ -461,33 +478,23 @@ class MonitoringSystem:
                                             raise retry_err
                                         time.sleep(0.002)  # Wait before retry
                                 
-                                # Get calibration for this LVDT from config
-                                if hasattr(self.config, 'lvdt_calibration') and i < len(self.config.lvdt_calibration):
-                                    calib = self.config.lvdt_calibration[i]
-                                    slope = calib.get('lvdt_slope', 19.86)  
-                                    intercept = calib.get('lvdt_intercept', 0.0)
-                                    
-                                    # Calculate displacement using calibration
-                                    disp = slope * raw_voltage + intercept
-                                    
-                                    lvdt_data_list.append({
+                                # Calculate displacement using calibration from monitoring system
+                                calib = self.lvdt_calibration[i]
+                                slope = calib['slope']
+                                intercept = calib['intercept']
+                                disp = slope * raw_voltage + intercept
+                                
+                                lvdt_data_list.append({
+                                    'voltage': raw_voltage,
+                                    'displacement': disp
+                                })
+                                
+                                # Update last valid reading
+                                if i < len(self.last_lvdt_readings):
+                                    self.last_lvdt_readings[i] = {
                                         'voltage': raw_voltage,
                                         'displacement': disp
-                                    })
-                                    
-                                    # Update last valid reading
-                                    if i < len(self.last_lvdt_readings):
-                                        self.last_lvdt_readings[i] = {
-                                            'voltage': raw_voltage,
-                                            'displacement': disp
-                                        }
-                                else:
-                                    print(f"Warning: Missing calibration for LVDT {i+1}")
-                                    lvdt_data_list.append({
-                                        'voltage': raw_voltage,
-                                        'displacement': 0.0
-                                    })
-                                    
+                                    }
                             except Exception as e:
                                 print(f"Error reading LVDT {i+1}: {str(e)}", file=sys.stderr)
                                 # Use last valid reading if available
@@ -688,9 +695,31 @@ class MonitoringSystem:
             if self.config.enable_accel:
                 print(f"\nAcceleration Moving Average: {avg_accel:.3f}")
                 print(f"Individual trigger: {self.config.trigger_acceleration_threshold:.3f}m/s^2, Average detrigger: {detrig_accel:.3f}m/s^2")
+                
+                # Print accelerometer calibration values
+                if hasattr(self.config, 'accel_offsets') and self.config.accel_offsets:
+                    print("\nAccelerometer Calibration Values:")
+                    for i, offset in enumerate(self.config.accel_offsets):
+                        if offset is not None:
+                            print(f"  Accel{i+1}: X-offset={offset['x']:.4f}, Y-offset={offset['y']:.4f}, Z-offset={offset['z']:.4f}, Scaling={offset['scaling_factor']:.4f}")
+                        else:
+                            print(f"  Accel{i+1}: Not calibrated")
+                
             if self.config.enable_lvdt:
                 print(f"\nDisplacement Moving Average: {avg_disp:.3f}")
                 print(f"Individual trigger: {self.config.trigger_displacement_threshold:.3f}mm, Average detrigger: {detrig_disp:.3f}mm")
+                
+                # Print LVDT calibration values
+                if hasattr(self, 'lvdt_calibration') and self.lvdt_calibration:
+                    print("\nLVDT Calibration Values:")
+                    for i, calib in enumerate(self.lvdt_calibration):
+                        if calib is not None:
+                            # Get slope and intercept from different possible structures
+                            slope = calib.get('slope', calib.get('lvdt_slope', 'Unknown'))
+                            intercept = calib.get('intercept', calib.get('lvdt_intercept', 'Unknown'))
+                            print(f"  LVDT{i+1}: Slope={slope:.4f}mm/V, Intercept={intercept:.4f}mm")
+                        else:
+                            print(f"  LVDT{i+1}: Not calibrated")
 
         print("\n===============================================================================")
         print("---  Press 'Ctrl + C' to stop monitoring ---")

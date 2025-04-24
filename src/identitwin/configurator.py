@@ -34,6 +34,7 @@ import warnings # Import warnings to suppress hardware-related warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message=".*chip_id.*")
 warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
+warnings.filterwarnings("ignore", message=".*chip_id == None.*")
 
 # Check if we're running on Linux (likely Raspberry Pi)
 IS_RASPBERRY_PI = platform.system() == "Linux"
@@ -224,8 +225,12 @@ class SystemConfig:
             self.gpio_pins = [18, 17]
 
         try:
-            from gpiozero.devices import _pins_shutdown
-            _pins_shutdown()
+            # Ensure GPIO pins are released by manually resetting them
+            from gpiozero import Device
+            from gpiozero.pins.native import NativeFactory
+            Device.pin_factory = NativeFactory()
+
+            # Initialize LEDs
             status_led = LED(self.gpio_pins[0])
             activity_led = LED(self.gpio_pins[1])
             status_led.off()

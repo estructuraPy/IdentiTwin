@@ -32,12 +32,21 @@ def initialize_lvdt(channels, slopes=None, config=None):
         raise ValueError("Invalid channels input.")
 
     lvdt_systems = []
-    print("\nCalibrating LVDTs...", flush=True)
+    print("\nCalibrating LVDTs...")
     for i, channel in enumerate(channels):
         try:
             slope = slopes[i]
-            lvdt_system = zeroing_lvdt(channel, slope, label=f"LVDT-{i+1}")
+            voltage = channel.voltage
+            intercept = -slope * voltage
+            print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+            
+            # Crear diccionario con los parámetros de calibración
+            lvdt_system = {
+                'slope': slope,
+                'intercept': intercept
+            }
             lvdt_systems.append(lvdt_system)
+            
             if config:
                 if not hasattr(config, 'lvdt_calibration'):
                     config.lvdt_calibration = []
@@ -46,7 +55,10 @@ def initialize_lvdt(channels, slopes=None, config=None):
                 config.lvdt_calibration[i] = lvdt_system.copy()
         except Exception as e:
             print(f"Error calibrating LVDT-{i+1}: {e}")
-            raise
+            # Removing default values - each sensor must be properly calibrated
+            print(f"LVDT-{i+1} calibration failed. This sensor must be calibrated before use.")
+            lvdt_systems.append(None)
+    
     if config:
         _save_calibration_data(config, lvdt_systems=lvdt_systems)
     return lvdt_systems
@@ -66,6 +78,11 @@ def zeroing_lvdt(channel, slope, label="LVDT"):
     voltage = channel.voltage
     intercept = -slope * voltage
     print(f" - {label} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+
+    # Store calibration values directly in the channel object
+    channel.calibration_slope = slope
+    channel.calibration_intercept = intercept
+
     return {'lvdt_slope': slope, 'lvdt_intercept': intercept}
 
 def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
@@ -110,7 +127,10 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
             print(f" - {label} scaling factor: {scaling_factor:.3f}")
             print(f" - {label} calibrated offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f}")
         else:
-            offsets.append({'x': 0.0, 'y': 0.0, 'z': 0.0, 'scaling_factor': 1.0})
+            # Removing default values - each sensor must be properly calibrated
+            print(f"Warning: Could not collect data for Accelerometer-{i+1}. Calibration failed.")
+            # Instead of using defaults, we'll return None for this sensor
+            offsets.append(None)
     if config:
         _save_calibration_data(config, accel_offsets=offsets)
     return offsets
@@ -128,8 +148,11 @@ def calibrate_accelerometer(data, offsets):
         
     Raises:
         ValueError: If required data components or calibration parameters are missing.
-        Exception: If calibration fails for any other reason.
+        TypeError: If offsets parameter is None (uncalibrated sensor).
     """
+    if offsets is None:
+        raise TypeError("Cannot calibrate with None offsets. Sensor must be properly calibrated first.")
+    
     calibrated_data = data.copy()
     if not all(k in data for k in ['x', 'y', 'z']):
         raise ValueError("Missing acceleration components.")
@@ -187,3 +210,12 @@ def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
     except Exception as e:
         print(f"\nError saving calibration data: {e}\n")
         return None
+
+def calibrate_lvdt_channels(channels, slopes):
+    """Calibrate each LVDT channel independently."""
+    for i, (channel, slope) in enumerate(zip(channels, slopes)):
+        voltage = channel.voltage
+        intercept = -slope * voltage
+        print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+        channel.set_calibration(slope, intercept)  # Almacenar la calibración en el canal
+    return channels

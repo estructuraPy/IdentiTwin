@@ -65,44 +65,26 @@ class DummyADS:
         self.gain = None
 
 class DummyAnalogIn:
-    def __init__(self, ads, channel, slope=19.86, intercept=0.0):
-        self.ads = ads
-        self.channel = channel
-        self._raw_value = 0  # Internal state for raw value
-        self.last_voltage = 0.0
-        self.cycle_start_time = time.time()
-        self.amplitude = 5.0  # mm
-        self.frequency = 0.1  # Hz
-        
-        # These parameters are only used internally for simulation
-        # They should NOT be used for calibration - that comes from config.lvdt_calibration
-        self._sim_slope = 19.86  # Internal parameter for simulation only
+    def __init__(self, ads, pin):
+        self.pin = pin
+        self._start_time = time.time()
+        self._amplitude = 0.5  # 0.5V amplitud
+        self._frequency = 0.1  # 0.1 Hz = 1 ciclo cada 10 segundos
+        self._noise_level = 0.01  # 10mV de ruido
+        self.calibration_slope = None  # Será establecido durante la calibración
+        self.calibration_intercept = None  # Será establecido durante la calibración
 
-    def _calculate_displacement(self):
-        """Calculates the simulated displacement."""
-        current_time = time.time()
-        elapsed_time = current_time - self.cycle_start_time
-        phase_shift = self.channel * (math.pi / 4)  # Adjust phase shift for each channel
-        displacement = self.amplitude * math.sin(2 * math.pi * self.frequency * elapsed_time + phase_shift)
-        noise = np.random.normal(0, 0.1)  # Gaussian noise with std dev 0.1mm
-        displacement += noise
-        return displacement
-
-    def _update_raw_value(self):
-        """Updates the internal raw value based on simulated displacement."""
-        displacement = self._calculate_displacement()
-        # Convert displacement to voltage using internal sim parameter
-        voltage = displacement / self._sim_slope if self._sim_slope != 0 else 0.0
-        simulated_raw = int((voltage * 1000.0) / 0.1875)
-        self._raw_value = max(-32768, min(simulated_raw, 32767))
+    def set_calibration(self, slope, intercept):
+        """Almacena los parámetros de calibración."""
+        self.calibration_slope = slope
+        self.calibration_intercept = intercept
 
     @property
     def voltage(self):
-        """Calculates voltage from the simulated raw value."""
-        self._update_raw_value()  # Ensure raw value is current
-        voltage = (self._raw_value * 0.1875) / 1000.0
-        self.last_voltage = voltage
-        return voltage
+        t = time.time() - self._start_time
+        base_signal = self._amplitude * math.sin(2 * math.pi * self._frequency * t)
+        noise = random.uniform(-self._noise_level, self._noise_level)
+        return base_signal + noise
 
 import time
 import random
@@ -276,13 +258,11 @@ class SimulatorConfig:
         return dummy
 
     def create_lvdt_channels(self, ads):
-        """Create dummy LVDT channels using a cyclic mapping (simulation)."""
+        """Create simulated LVDT channels."""
         channels = []
-        # Use 4 dummy channels to simulate ADS1115
-        dummy_channel_list = [0, 1, 2, 3]
         for i in range(self.num_lvdts):
-            ch = dummy_channel_list[i % len(dummy_channel_list)]
-            channels.append(DummyAnalogIn(ads, ch))
+            channel = DummyAnalogIn(ads, i)
+            channels.append(channel)
         return channels
 
     def create_accelerometers(self):

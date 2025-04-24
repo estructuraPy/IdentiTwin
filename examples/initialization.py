@@ -43,6 +43,7 @@ from identitwin import configurator
 from identitwin.system_monitoring import MonitoringSystem
 from identitwin import calibration
 from identitwin import report_generator
+from identitwin.calibration import calibrate_lvdt_channels
 
 # Default values for sampling rates and thresholds.
 ACCEL_SAMPLING_RATE = 100.0  # Hz
@@ -349,39 +350,7 @@ def main():
     monitor_system.plot_queue = None
 
     try:
-        monitor_system.status_led, monitor_system.activity_led = config.initialize_leds()
-    except Exception as e:
-        print(f"Could not initialize LEDs: {e}")
-        monitor_system.status_led = None
-        monitor_system.activity_led = None
-
-    print(f"\n=========================== Calibration and zeroing ===========================\n")
-    print("\nKeep the devices completely still during this process")
-
-    try:
         monitor_system.setup_sensors()
-
-        # Use hasattr to safely check if lvdt_channels exist and are not None
-        if config.enable_lvdt and hasattr(monitor_system, 'lvdt_channels') and monitor_system.lvdt_channels:
-            calibration.initialize_lvdt(channels=monitor_system.lvdt_channels,
-                                         slopes=LVDT_SLOPES,
-                                         config=config)
-        else:
-            print("LVDT calibration skipped (disabled or channels not available).")
-
-        if config.enable_accel and monitor_system.accelerometers:
-            accel_offsets = calibration.multiple_accelerometers(
-                mpu_list=monitor_system.accelerometers,
-                calibration_time=2.0,
-                config=config
-            )
-            if accel_offsets:
-                config.accel_offsets = accel_offsets
-                print("Accelerometer calibration complete.")
-            else:
-                print("Accelerometer calibration failed.")
-        else:
-            print("Accelerometer calibration skipped (disabled or sensors not available).")
 
         print("\n================== Init data processing =====================\n")
         config.window_duration = 10.0  # seconds of data visible
