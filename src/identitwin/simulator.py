@@ -6,7 +6,12 @@ import time
 import math
 import numpy as np
 import random  # Add this import
+import warnings  # For suppressing warnings
 
+# Suppress any hardware-related warnings in simulation mode
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*chip_id.*")
+warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
 
 # Dummy classes to simulate hardware
 class DummyLED:
@@ -29,13 +34,15 @@ class DummyAnalogIn:
     def __init__(self, ads, channel, slope=19.86, intercept=0.0):
         self.ads = ads
         self.channel = channel
-        self.slope = slope
-        self.intercept = intercept
         self._raw_value = 0  # Internal state for raw value
         self.last_voltage = 0.0
         self.cycle_start_time = time.time()
         self.amplitude = 5.0  # mm
         self.frequency = 0.1  # Hz
+        
+        # These parameters are only used internally for simulation
+        # They should NOT be used for calibration - that comes from config.lvdt_calibration
+        self._sim_slope = 19.86  # Internal parameter for simulation only
 
     def _calculate_displacement(self):
         """Calculates the simulated displacement."""
@@ -50,7 +57,8 @@ class DummyAnalogIn:
     def _update_raw_value(self):
         """Updates the internal raw value based on simulated displacement."""
         displacement = self._calculate_displacement()
-        voltage = displacement / self.slope if self.slope != 0 else 0.0
+        # Convert displacement to voltage using internal sim parameter
+        voltage = displacement / self._sim_slope if self._sim_slope != 0 else 0.0
         simulated_raw = int((voltage * 1000.0) / 0.1875)
         self._raw_value = max(-32768, min(simulated_raw, 32767))
 
@@ -61,11 +69,6 @@ class DummyAnalogIn:
         voltage = (self._raw_value * 0.1875) / 1000.0
         self.last_voltage = voltage
         return voltage
-
-    def elongation(self):
-        """Calculates elongation based on the simulated voltage."""
-        voltage = self.voltage
-        return self.slope * voltage + self.intercept
 
 import time
 import random

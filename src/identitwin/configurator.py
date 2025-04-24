@@ -28,21 +28,42 @@ import time
 import numpy as np
 import sys # Import sys for stderr
 import traceback # Import traceback for detailed errors
+import warnings # Import warnings to suppress hardware-related warnings
 
-# Check if we're running on a Raspberry Pi or similar platform
-try:
-    # Only import hardware-specific modules if we're on a compatible platform
-    from gpiozero import LED
-    import adafruit_ads1x15.ads1115 as ADS
-    import board
-    import busio
-    from adafruit_ads1x15.analog_in import AnalogIn
-    # Import the specific mpu6050 library used in the working example
-    from mpu6050 import mpu6050
-    I2C_AVAILABLE = True
-except (ImportError, NotImplementedError) as e:
-    # For simulation mode or if hardware libs fail
-    print(f"Warning: Hardware libraries not found or failed to import ({e}). Hardware functions disabled.")
+# Suppress warnings related to hardware detection
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*chip_id.*")
+warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
+
+# Check if we're running on Linux (likely Raspberry Pi)
+IS_RASPBERRY_PI = platform.system() == "Linux"
+I2C_AVAILABLE = False  # Default to False until proven otherwise
+
+# Only attempt to import hardware libraries if on Linux
+if IS_RASPBERRY_PI:
+    try:
+        # Only import hardware-specific modules if we're on a compatible platform
+        from gpiozero import LED
+        import adafruit_ads1x15.ads1115 as ADS
+        import board
+        import busio
+        from adafruit_ads1x15.analog_in import AnalogIn
+        # Import the specific mpu6050 library used in the working example
+        from mpu6050 import mpu6050
+        I2C_AVAILABLE = True
+        print("Hardware libraries successfully imported.")
+    except (ImportError, NotImplementedError) as e:
+        print(f"Note: Hardware libraries not available. Using software simulation mode.")
+        LED = None
+        ADS = None
+        board = None
+        busio = None
+        AnalogIn = None
+        mpu6050 = None
+        I2C_AVAILABLE = False
+else:
+    # On non-Linux systems, don't even try to import hardware libraries
+    print("Non-Linux platform detected. Using software simulation mode.")
     LED = None
     ADS = None
     board = None
@@ -53,7 +74,7 @@ except (ImportError, NotImplementedError) as e:
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
-print("Hardware detection: Raspberry Pi/Hardware Mode")
+print(f"Hardware mode: {'Raspberry Pi/Hardware' if I2C_AVAILABLE else 'Software Simulation'}")
 
 
 class SystemConfig:
@@ -66,16 +87,16 @@ class SystemConfig:
         output_dir=None,
         num_lvdts=2,
         num_accelerometers=2,
-        sampling_rate_acceleration=100.0,  # Accept any provided value
-        sampling_rate_lvdt=5.0,           # Accept any provided value
-        plot_refresh_rate=10.0,           # Accept any provided value
+        sampling_rate_acceleration=100.0,
+        sampling_rate_lvdt=5.0,         
+        plot_refresh_rate=10.0,         
         gpio_pins=None,
         trigger_acceleration_threshold=None,
         detrigger_acceleration_threshold=None,
         trigger_displacement_threshold=None,
         detrigger_displacement_threshold=None,
-        pre_event_time=5.0,   # Renamed from pre_trigger_time
-        post_event_time=15.0, # Renamed from post_trigger_time
+        pre_event_time=5.0, 
+        post_event_time=15.0,
         min_event_duration=2.0,
     ):
         """Initialize system configuration."""
@@ -153,19 +174,9 @@ class SystemConfig:
         self.post_event_time = post_event_time  # Renamed
         self.min_event_duration = min_event_duration
 
-        # LVDT configuration - these default values can be overridden locally
+        # LVDT configuration - ADC settings only, individual calibration handled separately
         self.lvdt_gain = 2.0 / 3.0  # ADC gain (+-6.144V)
         self.lvdt_scale_factor = 0.1875  # Constant for voltage conversion (mV)
-        self.lvdt_slope = 19.86  # Default slope in mm/V
-        self.lvdt_intercept = 0.0  # Default intercept
-        # New: initialize list to hold calibration results
-        self.lvdt_calibration = []
-
-        # Accelerometer configuration (from initialization.py)
-        self.accel_offsets = [
-            {"x": 0.0, "y": 0.0, "z": 0.0},  # Offsets for accelerometer 1
-            {"x": 0.0, "y": 0.0, "z": 0.0},  # Offsets for accelerometer 2
-        ]
 
         # LED configuration - default GPIO pins; can be modified from initialization or simulation
         self.gpio_pins = gpio_pins if gpio_pins is not None else [18, 17]
@@ -269,20 +280,18 @@ class SystemConfig:
             return None
         try:
             channels = []
-            # Set specific pin configurations
-            lvdt_config = [
-                {'pin': ADS.P0, 'slope': 19.86, 'intercept': 0.0},  # LVDT 1
-                {'pin': ADS.P1, 'slope': 19.86, 'intercept': 0.0}   # LVDT 2
-            ]
+            # Use custom pin config if provided, otherwise use defaults
+            if hasattr(self, 'lvdt_pin_config') and len(self.lvdt_pin_config) >= self.num_lvdts:
+                pins = self.lvdt_pin_config
+            else:
+                pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3][:self.num_lvdts]
             
-            for i, cfg in enumerate(lvdt_config[:self.num_lvdts]):
-                print(f"Configuring LVDT {i+1} on pin {cfg['pin']}")
+            for i in range(self.num_lvdts):
                 try:
-                    channel = AnalogIn(ads, cfg['pin'])
+                    channel = AnalogIn(ads, pins[i])
                     # Test reading
                     _ = channel.voltage
                     channels.append(channel)
-                    print(f"LVDT {i+1} initialized successfully")
                 except Exception as ch_err:
                     print(f"Error initializing LVDT {i+1}: {ch_err}")
                     continue

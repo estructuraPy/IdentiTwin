@@ -32,7 +32,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
         raise ValueError("Invalid channels input.")
 
     lvdt_systems = []
-    print("Calibrating LVDTs", flush=True)
+    print("\nCalibrating LVDTs...", flush=True)
     for i, channel in enumerate(channels):
         try:
             slope = slopes[i]
@@ -82,7 +82,8 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     """
     if not mpu_list:
         return None
-
+    
+    print("Calibrating accelerometers...", flush=True)
     offsets = []
     GRAVITY = 9.80665
     for i, mpu in enumerate(mpu_list):

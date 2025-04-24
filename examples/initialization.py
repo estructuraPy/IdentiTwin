@@ -12,10 +12,19 @@ import math
 import warnings
 import os
 import traceback
+import platform
 from datetime import datetime
 import numpy as np
 import matplotlib
 import importlib  # Add importlib to dynamically load modules
+
+# Suppress warnings related to hardware detection
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*chip_id.*")
+warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
+
+# Check if we're on a Raspberry Pi
+IS_RASPBERRY_PI = platform.system() == "Linux"
 
 # Ensure TkAgg backend is used, falling back to QtAgg if necessary.
 try:
@@ -42,9 +51,9 @@ PLOT_REFRESH_RATE = 10.0  # Hz
 
 NUM_LVDTS = 2
 NUM_ACCELS = 2
-LVDT_SLOPES = [19.86, 19.85]
+LVDT_SLOPES = [19.86, 21.86]
 
-ACCEL_TRIGGER_THRESHOLD = 0.981  # m/s^2 (0.1g)
+ACCEL_TRIGGER_THRESHOLD = 0.981  # m/sSetting up^2 (0.1g)
 ACCEL_DETRIGGER_THRESHOLD = 0.589  # m/s^2 (60% of trigger threshold)
 
 DISPLACEMENT_TRIGGER_THRESHOLD = 10.0  # mm
@@ -265,13 +274,18 @@ def main():
     enable_accel_plots = False
     enable_fft_plots = False
 
+    # Auto-detect simulation mode if not on Raspberry Pi
+    simulation_mode = args.simulation or not IS_RASPBERRY_PI
+    if not IS_RASPBERRY_PI and not args.simulation:
+        print("Non-Raspberry Pi platform detected. Automatically enabling simulation mode.")
+    
     # Dynamically load the appropriate configuration module
-    config_module_name = "identitwin.simulator" if args.simulation else "identitwin.configurator"
+    config_module_name = "identitwin.simulator" if simulation_mode else "identitwin.configurator"
     config_module = importlib.import_module(config_module_name)
-    SystemConfig = config_module.SimulatorConfig if args.simulation else config_module.SystemConfig
+    SystemConfig = config_module.SimulatorConfig if simulation_mode else config_module.SystemConfig
 
     print("\n======================== Identitwin Monitoring System =========================\n")
-    print(f"Operation Mode: {'Simulation' if args.simulation else 'Hardware'}")
+    print(f"Operation Mode: {'Simulation' if simulation_mode else 'Hardware'}")
 
     config = SystemConfig(
         enable_lvdt=enable_lvdt,
@@ -343,7 +357,6 @@ def main():
         monitor_system.setup_sensors()
 
         if config.enable_lvdt and monitor_system.lvdt_channels:
-            print("Calibrating LVDTs...")
             calibration.initialize_lvdt(channels=monitor_system.lvdt_channels,
                                          slopes=LVDT_SLOPES,
                                          config=config)
@@ -351,7 +364,6 @@ def main():
             print("LVDT calibration skipped (disabled or channels not available).")
 
         if config.enable_accel and monitor_system.accelerometers:
-            print("Calibrating accelerometers...")
             accel_offsets = calibration.multiple_accelerometers(
                 mpu_list=monitor_system.accelerometers,
                 calibration_time=2.0,

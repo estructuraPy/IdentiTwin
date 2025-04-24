@@ -113,7 +113,7 @@ class MonitoringSystem:
         print("\n--- Setting up sensors ---")
         self.sensors_initialized = False
         try:
-            print("Initializing LEDs...")
+            print("\nInitializing LEDs...")
             self.status_led, self.activity_led = self.config.initialize_leds()
             if self.status_led and self.activity_led:
                 print("LEDs setup successful.")
@@ -123,14 +123,12 @@ class MonitoringSystem:
             self.ads = None
             self.lvdt_channels = None
             if self.config.enable_lvdt:
-                print("Initializing ADS1115 for LVDTs...")
+                print("Initializing LVDTs...")
                 self.ads = self.config.create_ads1115()
                 if self.ads:
-                    print("ADS1115 setup successful.")
-                    print("Initializing LVDT channels...")
                     self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
                     if self.lvdt_channels:
-                         print(f"LVDT channels setup successful ({len(self.lvdt_channels)} channels).")
+                         print(f"LVDT channels setup successful ({len(self.lvdt_channels)} sensors).")
                     else:
                          print("LVDT channels setup failed.")
                 else:
@@ -138,10 +136,10 @@ class MonitoringSystem:
 
             self.accelerometers = None
             if self.config.enable_accel:
-                print("Initializing Accelerometers (MPU6050)...")
+                print("Initializing Accelerometers...")
                 self.accelerometers = self.config.create_accelerometers()
                 if self.accelerometers:
-                    print(f"Accelerometers setup successful ({len(self.accelerometers)} sensors).")
+                    print(f"\nAccelerometers setup successful ({len(self.accelerometers)} sensors).")
                 else:
                     print("Accelerometers setup failed.")
 
@@ -151,7 +149,7 @@ class MonitoringSystem:
 
             if lvdt_ok and accel_ok and (self.lvdt_channels or self.accelerometers):
                  self.sensors_initialized = True
-                 print("--- Sensor setup completed successfully ---")
+                 print("\n--- Sensor setup completed successfully ---")
             else:
                  self.sensors_initialized = False
                  print("--- Sensor setup failed or incomplete ---", file=sys.stderr)
@@ -386,17 +384,19 @@ class MonitoringSystem:
 
                                 calibrated_data = raw_data
                                 if i < len(self.config.accel_offsets):
-                                    offsets = self.config.accel_offsets[i]
-                                    if isinstance(offsets, dict):
-                                        scaling_factor = offsets.get('scaling_factor', 1.0)
-                                        calibrated_x = (raw_data['x'] + offsets.get('x', 0.0)) * scaling_factor
-                                        calibrated_y = (raw_data['y'] + offsets.get('y', 0.0)) * scaling_factor
-                                        calibrated_z = (raw_data['z'] + offsets.get('z', 0.0)) * scaling_factor
-                                        calibrated_data = {'x': calibrated_x, 'y': calibrated_y, 'z': calibrated_z}
-                                    else:
-                                        print(f"Warning: Invalid calibration data structure for accelerometer {i+1}. Expected dict, got {type(offsets)}. Using raw data.", file=sys.stderr)
+                                    try:
+                                        offsets = self.config.accel_offsets[i]
+                                        if isinstance(offsets, dict):
+                                            from .calibration import calibrate_accelerometer
+                                            calibrated_data = calibrate_accelerometer(raw_data, offsets)
+                                        else:
+                                            logging.warning(f"Invalid calibration data structure for accelerometer {i+1}. Expected dict, got {type(offsets)}. Using raw data.")
+                                    except Exception as cal_err:
+                                        logging.error(f"Failed to calibrate accelerometer {i+1}: {cal_err}. Data acquisition stopped.")
+                                        self.running = False  # Stop acquisition due to calibration failure
+                                        raise  # Re-raise the exception to exit the thread
                                 else:
-                                    print(f"Warning: No calibration offset found for accelerometer {i+1}. Using raw data.", file=sys.stderr)
+                                    logging.warning(f"No calibration offset found for accelerometer {i+1}. Using raw data.")
 
                                 mag = np.sqrt(calibrated_data['x']**2 + calibrated_data['y']**2 + calibrated_data['z']**2)
                                 calibrated_data['magnitude'] = mag
@@ -445,10 +445,9 @@ class MonitoringSystem:
                         lvdt_data_list = []
                         for i, ch in enumerate(self.lvdt_channels):
                             try:
-                                # Add delay between channel readings
-                                if i > 0:
-                                    time.sleep(0.001)  # 1ms delay between channels
-                                    
+                                # Add delay before ALL channel readings (not just after first one)
+                                time.sleep(0.001)  # 1ms delay for ALL channels
+                                
                                 raw_voltage = ch.voltage
                                 
                                 # Get calibration for this LVDT from config
@@ -667,17 +666,24 @@ class MonitoringSystem:
                 elapsed = time.time() - last_trigger
                 formatted_time = f"Recording event... ({elapsed:.1f}s elapsed)"
         print(f"Recording Status: {formatted_time}")
+        print("\n-------------------------------------------------------------------------------")
 
         if hasattr(self, "event_monitor"):
             avg_accel = self.event_monitor.moving_avg_accel
             avg_disp = self.event_monitor.moving_avg_disp
             detrig_accel = self.config.detrigger_acceleration_threshold
             detrig_disp = self.config.detrigger_displacement_threshold
-            print(f"Acceleration Moving Average: {avg_accel:.3f} (detrigger: {detrig_accel:.3f}m/s^2)")
-            print(f"Displacement Moving Average: {avg_disp:.3f} (detrigger: {detrig_disp:.3f}mm)")
+            
+            if self.config.enable_accel:
+                print(f"\nAcceleration Moving Average: {avg_accel:.3f}")
+                print(f"Individual trigger: {self.config.trigger_acceleration_threshold:.3f}m/s^2, Average detrigger: {detrig_accel:.3f}m/s^2")
+            if self.config.enable_lvdt:
+                print(f"\nDisplacement Moving Average: {avg_disp:.3f}")
+                print(f"Individual trigger: {self.config.trigger_displacement_threshold:.3f}mm, Average detrigger: {detrig_disp:.3f}mm")
 
         print("\n===============================================================================")
-        print("====================== `Ctrl + C` to finish monitoring ========================\n \n")
+        print("---  Press 'Ctrl + C' to stop monitoring ---")
+        print("===============================================================================\n \n \n \n")
 
     def _format_elapsed_time(self, elapsed_seconds):
         """

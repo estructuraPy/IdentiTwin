@@ -24,6 +24,7 @@ import csv
 import os
 import numpy as np
 import logging
+import time  # Added for sleep functionality
 from datetime import datetime, timedelta
 
 def initialize_general_csv(num_lvdts, num_accelerometers, filename='general_measurements.csv'):
@@ -72,31 +73,43 @@ def initialize_acceleration_csv(filename='acceleration.csv', num_accelerometers=
         writer.writerow(header)
     return filename
 
-def multiple_lvdt(channels, lvdt_systems):
-    """Process readings from multiple LVDT sensors."""
-    results = []
-    for i, (channel, system) in enumerate(zip(channels, lvdt_systems)):
-        voltage = channel.voltage
-        displacement = system.lvdt_slope * voltage + system.lvdt_intercept
-        results.append({
-            'voltage': voltage,
-            'displacement': displacement
-        })
-    return results
-
 def read_lvdt_data(lvdt_channels, config):
     """
     Reads each LVDT channel and applies slope/intercept calibration.
-    Returns a list of dicts under the key 'lvdt_data' with 'displacement'.
+    Raises exception if calibration data is missing.
+    Returns a list of dicts with 'voltage' and 'displacement'.
     """
     lvdt_values = []
-    for ch in lvdt_channels:
+    for i, ch in enumerate(lvdt_channels):
         try:
+            # Add small delay before reading to ensure stable readings
+            time.sleep(0.001)  # 1ms delay for stability
+            
             voltage = ch.voltage
-            displacement = config.lvdt_slope * voltage + config.lvdt_intercept
-            lvdt_values.append({"displacement": displacement})
-        except:
-            lvdt_values.append({"displacement": 0.0})
+            
+            # Use individual calibration parameters - fail explicitly if missing
+            if not hasattr(config, 'lvdt_calibration'):
+                raise ValueError(f"No LVDT calibration data available in configuration")
+                
+            if i >= len(config.lvdt_calibration):
+                raise ValueError(f"Missing calibration data for LVDT {i+1}")
+                
+            calib = config.lvdt_calibration[i]
+            slope = calib.get('lvdt_slope')
+            intercept = calib.get('lvdt_intercept')
+            
+            if slope is None or intercept is None:
+                raise ValueError(f"Incomplete calibration parameters for LVDT {i+1}")
+                
+            displacement = slope * voltage + intercept
+            lvdt_values.append({
+                'voltage': voltage,
+                'displacement': displacement
+            })
+        except Exception as e:
+            print(f"Error reading LVDT {i+1}: {e}")
+            raise  # Reraise the exception to stop execution
+            
     return lvdt_values
 
 def extract_data_from_event(event_data, start_time, config):
