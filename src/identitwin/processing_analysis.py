@@ -30,50 +30,35 @@ from .processing_data import extract_data_from_event  # Add this import
 import traceback  # Add this import for exception handling
 
 def calculate_fft(data, sampling_rate):
-    """
-    Calculate FFT for accelerometer data.
-    
-    Args:
-        data: Dictionary containing x, y, z acceleration data arrays
-        sampling_rate: Sampling rate in Hz
-    
-    Returns:
-        Tuple (frequencies, fft_x, fft_y, fft_z)
-    """
-    # Ensure sampling_rate is positive
+    """Calculate one‐sided FFT with DC removal and correct normalization."""
     if sampling_rate <= 0:
-        print(f"Warning: Invalid sampling rate ({sampling_rate}) for FFT calculation. Returning empty results.")
+        print(f"Warning: Invalid sampling rate ({sampling_rate}) for FFT calculation.")
         return np.array([]), np.array([]), np.array([]), np.array([])
 
-    # Find the next power of 2 length
-    n = max(len(data.get('x', [])), len(data.get('y', [])), len(data.get('z', []))) # Safer access
+    # Datasets por eje
+    n = len(data.get('x', []))
     if n == 0:
-        print("Warning: No data provided for FFT calculation.")
         return np.array([]), np.array([]), np.array([]), np.array([])
 
-    n_fft = 2**int(np.ceil(np.log2(n)))
+    # Detrend: restar media
+    axes = {}
+    for axis in ['x','y','z']:
+        arr = np.nan_to_num(data.get(axis, np.zeros(n)))
+        axes[axis] = arr - np.mean(arr)
 
-    # Create Hanning window of appropriate length
-    window = np.hanning(n_fft)
+    # Hanning window
+    window = np.hanning(n)
+    window_sum = np.sum(window)
 
-    # Process each axis
+    # FFT y normalización
     fft_results = {}
-    for axis in ['x', 'y', 'z']:
-        axis_data = data.get(axis, []) # Safer access
-        # Zero pad data to n_fft length
-        padded_data = np.zeros(n_fft)
-        padded_data[:len(axis_data)] = axis_data
+    for axis, signal in axes.items():
+        y = np.fft.rfft(signal * window)
+        # One-sided amplitude spectrum
+        fft_results[axis] = 2.0 * np.abs(y) / window_sum
 
-        # Apply window and calculate FFT
-        windowed_data = padded_data * window
-        fft_result = np.fft.rfft(windowed_data)
-        # Normalize FFT magnitude correctly
-        fft_magnitude = np.abs(fft_result) * 2.0 / np.sum(window) # Correct normalization using window sum
-        fft_results[axis] = fft_magnitude
-
-    # Calculate frequency array (same for all axes)
-    freqs = np.fft.rfftfreq(n_fft, 1.0 / sampling_rate)
-
+    # Frecuencias hasta Nyquist
+    freqs = np.fft.rfftfreq(n, d=1.0/sampling_rate)
     return freqs, fft_results['x'], fft_results['y'], fft_results['z']
 
 def calculate_rms(data):
@@ -164,9 +149,9 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
                     key_z = f'accel{accel_idx+1}_z'
                     if key_x in np_data and key_y in np_data and key_z in np_data:
                         accel_data = {
-                            'x': np_data[key_x],
-                            'y': np_data[key_y],
-                            'z': np_data[key_z]
+                            'x': np.nan_to_num(np_data[key_x]), # Replace NaN with 0 for FFT
+                            'y': np.nan_to_num(np_data[key_y]),
+                            'z': np.nan_to_num(np_data[key_z])
                         }
                         freqs, fft_x, fft_y, fft_z = calculate_fft(accel_data, sampling_rate)
                         fft_results.append({
@@ -230,14 +215,12 @@ def generate_event_analysis(event_folder, np_data, timestamp_str, config, accel_
 def find_dominant_frequencies(fft_data, freqs, n_peaks=3):
     """Find the n most dominant frequencies in FFT data."""
     peaks = []
-    for i in range(1, len(fft_data)-1):
-        if (fft_data[i] > fft_data[i-1] and 
-            fft_data[i] > fft_data[i+1] and 
-            freqs[i] > 0.5):  # Ignore very low frequencies
+    for i in range(1, len(fft_data) - 1):
+        if fft_data[i] > fft_data[i - 1] and fft_data[i] > fft_data[i + 1]:
             peaks.append((fft_data[i], freqs[i]))
     
     # Sort peaks by amplitude and get top n
-    peaks.sort(reverse=True)
+    peaks.sort(reverse=True, key=lambda x: x[0])
     return [freq for _, freq in peaks[:n_peaks]]
 
 def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, config, 
@@ -289,27 +272,52 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                 ax_time.grid(True, alpha=0.3)
                 ax_time.legend()
                 
+                # FFT plot
+                ax_fft = fig.add_subplot(2, 1, 2)  # Create FFT subplot BEFORE using it
+                
                 # Retrieve FFT for this accelerometer from fft_results_list
                 if fft_results_list and len(fft_results_list) > accel_idx:
                     current_fft = fft_results_list[accel_idx]
-                    current_freq = current_fft['freq']
-                    current_fft_x = current_fft['fft_x']
-                    current_fft_y = current_fft['fft_y']
-                    current_fft_z = current_fft['fft_z']
-                else:
-                    current_freq, current_fft_x, current_fft_y, current_fft_z = [], [], [], []
+                    freqs = current_fft['freq']
+                    
+                    # Plot FFT data with improved filtering and log scale
+                    for data, color, label in [
+                        (current_fft['fft_x'], 'r', 'X'),
+                        (current_fft['fft_y'], 'g', 'Y'),
+                        (current_fft['fft_z'], 'b', 'Z')
+                    ]:
+                        # Filter out frequencies below 0.5 Hz and add small offset to avoid log(0)
+                        mask = freqs > 0.5
+                        data_filtered = data[mask] + 1e-10
+                        freqs_filtered = freqs[mask]
+                        
+                        ax_fft.semilogy(freqs_filtered, data_filtered, color=color, 
+                                     label=label, alpha=0.8, linewidth=1)
+
+                    # Set FFT plot parameters
+                    ax_fft.set_xlabel('Frequency (Hz)')
+                    ax_fft.set_ylabel('Amplitude (log scale)')
+                    ax_fft.set_title('Frequency Analysis')
+                    ax_fft.grid(True, which='both', alpha=0.3)
+                    ax_fft.legend()
                 
-                # FFT plot for this accelerometer using its own FFT data
-                ax_fft = fig.add_subplot(2, 1, 2)
-                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_x), 'r', label='X', alpha=0.8)
-                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_y), 'g', label='Y', alpha=0.8)
-                ax_fft.plot(current_freq, np.ma.masked_invalid(current_fft_z), 'b', label='Z', alpha=0.8)
-                ax_fft.set_xlabel('Frequency (Hz)')
-                ax_fft.set_ylabel('Amplitude')
-                ax_fft.set_title(f'Accelerometer {accel_idx+1} - Frequency Analysis')
-                ax_fft.grid(True, alpha=0.3)
-                ax_fft.legend()
-                
+                    # Adjust FFT plot limits for better visualization
+                    nyquist = config.sampling_rate_acceleration/2
+                    ax_fft.set_xlim(0.5, nyquist)  # From 0.5 Hz to Nyquist frequency
+                    
+                    # Use dynamic ylim based on actual data range
+                    min_val = 1e-4  # Minimum floor for visibility
+                    max_values = []
+                    for data in [current_fft['fft_x'], current_fft['fft_y'], current_fft['fft_z']]:
+                        if len(data[mask]) > 0:
+                            max_values.append(np.max(data[mask]))
+                    
+                    if max_values:
+                        max_val = max(max_values) * 2  # Give some headroom
+                        ax_fft.set_ylim(min_val, max_val)
+                    else:
+                        ax_fft.set_ylim(1e-6, 1e2)  # Default fallback
+                    
                 fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s', fontsize=14, y=0.995)
                 plt.tight_layout(rect=[0, 0, 1, 0.97])
                 accel_filename = f"{os.path.splitext(filename)[0]}_accel{accel_idx+1}.png"

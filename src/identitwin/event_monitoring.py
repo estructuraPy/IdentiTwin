@@ -109,6 +109,7 @@ class EventMonitor:
         self.error_count = 0
         self.max_errors = 100  # Maximum number of consecutive errors before warning
         self.finalize_thread_started = False  # Nuevo: evita múltiples lanzamientos
+        self.event_start_ts = None  # Nuevo: timestamp al detectar trigger
 
     def detect_event(self, sensor_data):
         """Detect and record event data using trigger/detrigger mechanism."""
@@ -175,6 +176,7 @@ class EventMonitor:
                 state.set_event_variable("last_trigger_time", current_time)
                 # Initialize current_event_data with the full pre_trigger_buffer content
                 self.current_event_data = list(self.pre_trigger_buffer) 
+                self.event_start_ts = sensor_data["timestamp"]  # Guardar ts de trigger
             
             # Append the triggering data point if it's not already the last one from the buffer
             if not self.current_event_data or sensor_data != self.current_event_data[-1]:
@@ -195,7 +197,7 @@ class EventMonitor:
             if (current_time - self.last_trigger_time > post_trigger_time
                     and not self.finalize_thread_started):
                 data_to_save = list(self.current_event_data)
-                start_ts = data_to_save[0]["timestamp"]
+                start_ts = self.event_start_ts  # Usar timestamp del trigger
 
                 # Marca que ya se lanzó el hilo y no permitirá más lanzamientos
                 self.finalize_thread_started = True
@@ -235,6 +237,7 @@ class EventMonitor:
             self.in_event_recording = False
             state.set_event_variable("is_event_recording", False)
             self.finalize_thread_started = False  # Permite nuevo evento futuro
+            self.event_start_ts = None  # Resetear timestamp de inicio
 
     def event_monitoring_thread(self):
         """Thread function for monitoring events."""
@@ -380,7 +383,7 @@ class EventMonitor:
     def _finalize_event(self):
         """Helper method to finalize and save event data."""
         try:
-            event_time = self.current_event_data[0]["timestamp"]
+            event_time = self.event_start_ts  # Usar timestamp del trigger
             if self._save_event_data(self.current_event_data, event_time):
                 # Only increment counter if event was successfully saved
                 self.event_count_ref[0] += 1
@@ -396,6 +399,7 @@ class EventMonitor:
         self.last_detrigger_time = 0
         self.min_duration_met = False
         state.set_event_variable("is_event_recording", False)
+        self.event_start_ts = None  # Resetear timestamp de inicio
 
 def print_event_banner():
     """Print a  banner when the event starts"""

@@ -96,6 +96,14 @@ class MonitoringSystem:
                 {"voltage": 0.0, "displacement": 0.0} for _ in range(config.num_lvdts)
             ]
 
+        # Add display buffer for status updates
+        self.display_buffer = {
+            'accel_data': [],  # List of latest accelerometer readings
+            'lvdt_data': [],   # List of latest LVDT readings
+            'last_update': 0,  # Time of last buffer update
+            'buffer_max_age': 0.5  # Maximum age of data in seconds
+        }
+
     def setup_sensors(self):
         """
         Set up sensors based on the configuration.
@@ -425,14 +433,12 @@ class MonitoringSystem:
                         data_acquired = True
 
                 elif self.config.enable_lvdt and self.lvdt_channels and now >= next_lvdt_time:
-                    # Check if we're too close to an accelerometer reading
-                    time_since_accel = now - next_accel_time
-                    time_to_next_accel = next_accel_time - now
-                    
-                    # Skip this LVDT reading if too close to accelerometer timing
-                    if min(abs(time_since_accel), abs(time_to_next_accel)) < 0.002:  # 2ms safety margin
-                        continue
-                        
+                    # Add similar timing logic as accelerometer
+                    if last_lvdt_actual_time is not None:
+                        period = now - last_lvdt_actual_time
+                        self.performance_stats["lvdt_periods"].append(period)
+                    last_lvdt_actual_time = now
+
                     # Add a mutex or lock for LVDT access
                     self.lvdt_lock = threading.Lock()
                     with self.lvdt_lock:
@@ -481,6 +487,7 @@ class MonitoringSystem:
                                     lvdt_data_list.append({'voltage': 0.0, 'displacement': 0.0})
 
                         timestamp = datetime.now()
+                        expected_relative_time = lvdt_sample_count * lvdt_interval
                         sensor_data_packet = {
                             'timestamp': timestamp,
                             'expected_relative_time': expected_relative_time,
@@ -493,6 +500,14 @@ class MonitoringSystem:
 
                 if sensor_data_packet:
                     self.data_queue.append(sensor_data_packet)
+                    # Update display buffer with fresh data
+                    now = time.time()
+                    if sensor_data_packet.get('sensor_type') == 'accel':
+                        self.display_buffer['accel_data'] = sensor_data_packet.get('sensor_data', {}).get('accel_data', [])
+                        self.display_buffer['last_update'] = now
+                    elif sensor_data_packet.get('sensor_type') == 'lvdt':
+                        self.display_buffer['lvdt_data'] = sensor_data_packet.get('sensor_data', {}).get('lvdt_data', [])
+                        self.display_buffer['last_update'] = now
                     if self.activity_led:
                         try:
                             self.activity_led.blink(on_time=0.01, off_time=0.01, n=1, background=True)
@@ -617,24 +632,23 @@ class MonitoringSystem:
 
         if self.config.enable_accel:
             print("\nAccelerometer Status:")
-            # Get accel data from current sensor_data if available
-            accel_list = []
-            if sensor_data and "sensor_data" in sensor_data:
-                accel_list = sensor_data.get("sensor_data", {}).get("accel_data", [])
-                
-            if accel_list:
-                for i, accel in enumerate(accel_list):
-                    x = accel.get('x', float('nan'))
-                    y = accel.get('y', float('nan'))
-                    z = accel.get('z', float('nan'))
-                    mag = accel.get('magnitude', float('nan'))
-                    print(f"  Accel{i+1}: X={x:.3f} Y={y:.3f} Z={z:.3f} (Mag: {mag:.3f}) m/s²")
-            else:
-                # Check if accelerometers are initialized but no data
-                if hasattr(self, 'accelerometers') and self.accelerometers:
-                    print("  No current accelerometer data (waiting for next reading)")
+            now = time.time()
+            buffer_age = now - self.display_buffer['last_update']
+            
+            if buffer_age <= self.display_buffer['buffer_max_age']:
+                accel_data = self.display_buffer['accel_data']
+                if accel_data:
+                    for i, accel in enumerate(accel_data):
+                        if isinstance(accel, dict):
+                            x = accel.get('x', 0.0)
+                            y = accel.get('y', 0.0)
+                            z = accel.get('z', 0.0)
+                            mag = np.sqrt(x*x + y*y + z*z)
+                            print(f"  Accel{i+1}: X={x:.3f} Y={y:.3f} Z={z:.3f} (Mag: {mag:.3f}) m/s²")
                 else:
-                    print("  No accelerometer data available (sensors not initialized)")
+                    print("  Waiting for accelerometer data...")
+            else:
+                print("  Data not updated in the last 500ms")
 
         event_count = self.event_monitor.event_count_ref[0] if hasattr(self, 'event_monitor') else 0
         state_event_count = state.get_event_variable("event_count", 0)
