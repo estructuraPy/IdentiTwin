@@ -9,6 +9,7 @@ from datetime import datetime
 import time
 import math
 import numpy as np
+import random  # Añadir esta importación
 
 # Clases dummy para simular hardware
 class DummyLED:
@@ -73,14 +74,41 @@ class DummyMPU6050:
     def __init__(self, addr):
         self.addr = addr
         self._cycle_start_time = time.time()
+        self._current_interval = self._generate_random_interval()
+
+    def _generate_random_interval(self):
+        """Generate a random interval between 5 and 30 seconds."""
+        return random.uniform(30, 60)
+
+    def _update_interval(self, t):
+        """Update the interval if the time exceeds the current interval."""
+        if t >= self._current_interval:
+            self._cycle_start_time = time.time()  # Reset the cycle start time
+            self._current_interval = self._generate_random_interval()  # Generate a new random interval
 
     def get_accel_data(self):
-        """Simulate accelerometer data with valid values."""
+        """Simulate accelerometer data with constant noise and periodic signals."""
         t = time.time() - self._cycle_start_time
+        
+        # Update the interval if needed
+        self._update_interval(t)
+
+        # Constant noise in all directions
+        noise_x = 0.005 * math.sin(t * 30) + 0.003 * math.sin(t * 50)
+        noise_y = 0.006 * math.cos(t * 25) + 0.004 * math.cos(t * 60)
+        noise_z = 0.007 * math.sin(t * 30) + 0.005 * math.cos(t * 40)
+
+        # Smooth periodic signals with gradual growth and decay
+        cyclic_factor = (math.sin(t / self._current_interval * math.pi) + 1) / 2  # Oscillates between 0 and 1
+
+        periodic_signal_x = cyclic_factor * (0.7 * math.sin(t * 35) + 0.2 * math.sin(t * 23))
+        periodic_signal_y = cyclic_factor * (0.5 * math.cos(t * 38) + 0.2 * math.cos(t * 24))
+        periodic_signal_z = cyclic_factor * (0.5 * math.sin(t * 42) + 0.4 * math.sin(t * 25))
+
         return {
-                'x': 0.1 * math.sin(t * 100) + 0.15 * math.sin(t * 50),
-                'y': 0.5 * math.cos(t * 200) + 0.1 * math.cos(t * 90),
-                'z': 9.81 + 0.25 * math.sin(5 * t) + 0.5 * math.sin(t * 350)
+            'x': noise_x + periodic_signal_x,
+            'y': noise_y + periodic_signal_y,
+            'z': 9.81 + noise_z + periodic_signal_z  # Gravity + noise + periodic signals
         }
 
         
