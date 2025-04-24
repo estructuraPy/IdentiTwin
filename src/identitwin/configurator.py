@@ -229,122 +229,68 @@ class SystemConfig:
         """Initialize LED indicators for Raspberry Pi hardware."""
         global LED  # Explicitly declare LED as global to avoid UnboundLocalError
         
-        # Check specifically if the LED class from gpiozero was imported successfully
         if LED is None:
             print("Warning: Cannot initialize LEDs, 'gpiozero' library not available or failed to import.")
-            return None, None  # Return None to indicate failure
-        # Check if GPIO pins are configured
+            return NonFunctionalLED(18), NonFunctionalLED(17)  # Return non-functional LEDs
+        
         if not self.gpio_pins or len(self.gpio_pins) < 2:
-             print("Warning: Cannot initialize LEDs, GPIO pins not configured correctly.")
-             return NonFunctionalLED(18), NonFunctionalLED(17) # Use default pin numbers for messages
+            print("Warning: GPIO pins not configured correctly. Using default pins 18 and 17.")
+            self.gpio_pins = [18, 17]  # Default to pins 18 and 17
 
         try:
-            # Close any existing devices on these pins before creating new ones
-            # Import the internal function for device cleanup
+            # Ensure all pins are released before initializing
             from gpiozero.devices import _pins_shutdown
-            _pins_shutdown() # This releases all pins
-            
-            # Initialize real LEDs using gpiozero
-            print(f"Attempting to initialize LEDs on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
+            _pins_shutdown()
+
+            # Initialize LEDs
             status_led = LED(self.gpio_pins[0])
             activity_led = LED(self.gpio_pins[1])
             status_led.off()
             activity_led.off()
-            print("LEDs initialized successfully.")
+            print(f"LEDs initialized on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             return status_led, activity_led
         except Exception as e:
-            # If that fails, try an alternative approach with individual pin cleanup
-            try:
-                print(f"First LED initialization attempt failed: {e}")
-                print("Trying alternative approach...")
-                
-                from importlib import reload
-                import gpiozero
-                reload(gpiozero)
-                
-                # Try again with fresh imports
-                from gpiozero import LED
-                status_led = LED(self.gpio_pins[0])
-                activity_led = LED(self.gpio_pins[1])
-                status_led.off()
-                activity_led.off()
-                print("LEDs initialized successfully with alternative method.")
-                return status_led, activity_led
-            except Exception as e2:
-                # Catch potential errors during LED object creation (e.g., invalid pin)
-                print(f"Warning: Could not initialize LEDs on specified pins: {e2}", file=sys.stderr)
-                print("LED functionality will be disabled")
-                # Return non-functional LEDs that log failures but don't crash
-                return NonFunctionalLED(self.gpio_pins[0]), NonFunctionalLED(self.gpio_pins[1])
+            print(f"Error initializing LEDs: {e}. Using non-functional LEDs.")
+            return NonFunctionalLED(self.gpio_pins[0]), NonFunctionalLED(self.gpio_pins[1])
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
         if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
-            print("Error: Cannot create ADS1115, required hardware libraries not available.", file=sys.stderr)
+            print("Error: Cannot create ADS1115, required hardware libraries not available.")
             return None
         try:
-            # Initialize I2C bus with higher clock speed
             i2c = busio.I2C(board.SCL, board.SDA, frequency=400000)  # 400 kHz
-            print("I2C bus initialized successfully for ADS1115.")
-            
             ads = ADS.ADS1115(i2c)
-            ads.mode = 0 # Continuous conversion mode
-            ads.data_rate = 860 # Highest data rate
             ads.gain = self.lvdt_gain
-            print("ADS1115 object created and configured successfully.")
+            print("ADS1115 initialized successfully.")
             return ads
         except Exception as e:
-            print(f"Error initializing ADS1115: {e}", file=sys.stderr)
-            traceback.print_exc()
+            print(f"Error initializing ADS1115: {e}")
             return None
 
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
         if ads is None or not I2C_AVAILABLE or AnalogIn is None:
-            print("Error: Cannot create LVDT channels.", file=sys.stderr)
+            print("Error: Cannot create LVDT channels, required hardware libraries not available.")
             return None
+
         try:
             channels = []
-            # Use custom pin config if provided, otherwise use defaults
-            if hasattr(self, 'lvdt_pin_config') and len(self.lvdt_pin_config) >= self.num_lvdts:
-                pins = self.lvdt_pin_config
-                print(f"Using custom LVDT pin configuration")
-            else:
-                pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3][:self.num_lvdts]
-                print(f"Using default LVDT pin configuration: A0, A1")
-            
-            # Try to configure ADS1115 for higher reliability
-            try:
-                # Set higher data rate for better readings
-                ads.data_rate = 860  # Maximum data rate in SPS
-                # Set continuous conversion mode
-                ads.mode = 0  # 0 = Continuous conversion mode
-                print(f"Configured ADS1115: data_rate={ads.data_rate}, mode={ads.mode}, gain={ads.gain}")
-            except Exception as config_err:
-                print(f"Warning: Could not configure ADS1115 settings: {config_err}")
-            
-            for i in range(self.num_lvdts):
+            pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3][:self.num_lvdts]  # Default pin configuration
+            for i, pin in enumerate(pins):
                 try:
-                    print(f"Initializing LVDT {i+1} on pin {i}")
-                    channel = AnalogIn(ads, pins[i])
-                    # Test reading
-                    voltage = channel.voltage
-                    print(f"  - LVDT {i+1} initial voltage reading: {voltage:.4f}V")
+                    channel = AnalogIn(ads, pin)
+                    voltage = channel.voltage  # Test reading
+                    print(f"LVDT {i+1} initialized on pin {pin} with initial voltage: {voltage:.4f}V")
                     channels.append(channel)
                 except Exception as ch_err:
-                    print(f"Error initializing LVDT {i+1}: {ch_err}")
-                    continue
-                    
+                    print(f"Error initializing LVDT {i+1} on pin {pin}: {ch_err}")
             if not channels:
-                print("No LVDT channels could be initialized")
+                print("No LVDT channels could be initialized.")
                 return None
-            
-            print(f"Successfully created {len(channels)} LVDT channels")
             return channels
-            
         except Exception as e:
-            print(f"Error creating LVDT channels: {e}", file=sys.stderr)
-            traceback.print_exc()
+            print(f"Error creating LVDT channels: {e}")
             return None
 
     def create_accelerometers(self):

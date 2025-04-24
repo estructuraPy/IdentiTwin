@@ -126,32 +126,51 @@ class EventMonitor:
                 return False
 
             # Process sensor data safely
-            magnitude = 0
-            instantaneous_disp = 0
+            accel_magnitudes = []
+            disp_values = []
 
-            if accel_data and len(accel_data) > 0:
-                accel = accel_data[0]
+            # Calculate magnitudes for all accelerometers
+            for accel in accel_data:
                 if all(k in accel for k in ['x', 'y', 'z']):
-                    magnitude = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
-                    self.accel_buffer.append(magnitude)
-                    self.moving_avg_accel = np.mean(self.accel_buffer)
+                    mag = np.sqrt(accel["x"]**2 + accel["y"]**2 + accel["z"]**2)
+                    accel_magnitudes.append(mag)
+            # Calculate displacements for all LVDTs
+            for lvdt in lvdt_data:
+                disp = abs(lvdt.get("displacement", 0))
+                disp_values.append(disp)
 
-            if lvdt_data and len(lvdt_data) > 0:
-                instantaneous_disp = abs(lvdt_data[0].get("displacement", 0))
-                self.disp_buffer.append(instantaneous_disp)
+            # Update buffers for moving averages (optional, can use first sensor as before)
+            if accel_magnitudes:
+                self.accel_buffer.append(accel_magnitudes[0])
+                self.moving_avg_accel = np.mean(self.accel_buffer)
+            if disp_values:
+                self.disp_buffer.append(disp_values[0])
                 self.moving_avg_disp = np.mean(self.disp_buffer)
 
-            # Event detection logic
+            # Event detection logic (multi-sensor, multi-channel)
             trigger_accel = self.thresholds.get("acceleration", 0.981)
             trigger_disp = self.thresholds.get("displacement", 2.0)
-            
-            accel_trigger = magnitude > trigger_accel
-            lvdt_trigger = instantaneous_disp > trigger_disp
+            detrigger_accel = self.thresholds.get("detrigger_acceleration", trigger_accel * 0.5)
+            detrigger_disp = self.thresholds.get("detrigger_displacement", trigger_disp * 0.5)
 
+            # Check if any sensor is above trigger threshold
+            accel_trigger = any(mag > trigger_accel for mag in accel_magnitudes)
+            lvdt_trigger = any(disp > trigger_disp for disp in disp_values)
+
+            # Check if all sensors are below detrigger threshold
+            accel_below_detrigger = all(mag < detrigger_accel for mag in accel_magnitudes) if accel_magnitudes else True
+            lvdt_below_detrigger = all(disp < detrigger_disp for disp in disp_values) if disp_values else True
+
+            # Start event if any sensor triggers
             if accel_trigger or lvdt_trigger:
-                return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp)
-            elif self.in_event_recording:
+                return self._handle_event_trigger(sensor_data, current_time, accel_magnitudes, disp_values)
+            # Stop event only if all sensors are below detrigger
+            elif self.in_event_recording and accel_below_detrigger and lvdt_below_detrigger:
                 return self._handle_event_recording(sensor_data, current_time)
+            # If still in event, keep recording
+            elif self.in_event_recording:
+                self.current_event_data.append(sensor_data)
+                return True
             return True
 
         except Exception as e:
@@ -161,7 +180,7 @@ class EventMonitor:
                 self.error_count = 0
             return False
 
-    def _handle_event_trigger(self, sensor_data, current_time, magnitude, displacement):
+    def _handle_event_trigger(self, sensor_data, current_time, accel_magnitudes, disp_values):
         """Handle event trigger logic"""
         try:
             self.last_trigger_time = current_time
