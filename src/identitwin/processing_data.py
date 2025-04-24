@@ -32,7 +32,7 @@ def initialize_general_csv(num_lvdts, num_accelerometers, filename='general_meas
         writer = csv.writer(f)
         
         # Create header with both absolute and relative time
-        header = ['Timestamp', 'Expected_Time']
+        header = ['Timestamp', 'Time']  # Changed from 'Expected_Time'
         
         # Add LVDT columns
         for i in range(num_lvdts):
@@ -52,7 +52,7 @@ def initialize_displacement_csv(filename='displacements.csv', num_lvdts=2):
         writer = csv.writer(f)
         
         # Create header with both absolute and relative time
-        header = ['Timestamp', 'Expected_Time']
+        header = ['Timestamp', 'Time']  # Changed from 'Expected_Time'
         for i in range(num_lvdts):
             header.extend([f'LVDT{i+1}_Voltage', f'LVDT{i+1}_Displacement'])
             
@@ -65,7 +65,7 @@ def initialize_acceleration_csv(filename='acceleration.csv', num_accelerometers=
         writer = csv.writer(f)
         
         # Create header with both absolute and relative time
-        header = ['Timestamp', 'Expected_Time']
+        header = ['Timestamp', 'Time']  # Changed from 'Expected_Time'
         for i in range(num_accelerometers):
             header.extend([f'Accel{i+1}_X', f'Accel{i+1}_Y', f'Accel{i+1}_Z', f'Accel{i+1}_Magnitude'])
             
@@ -199,7 +199,7 @@ def create_displacement_csv(event_data, event_folder, config):
             writer = csv.writer(f)
             
             # Create header
-            header = ['Timestamp', 'Expected_Time']
+            header = ['Timestamp', 'Time']  # Changed from 'Expected_Time'
             for i in range(config.num_lvdts):
                 header.extend([f'LVDT{i+1}_Voltage', f'LVDT{i+1}_Displacement'])
             writer.writerow(header)
@@ -209,8 +209,9 @@ def create_displacement_csv(event_data, event_folder, config):
                 logging.warning("No event data provided for displacement CSV creation.")
                 return displacement_file # Return empty file path
                 
-            # Use the timestamp of the first data point as the reference start time (t=0)
-            start_time = event_data[0]["timestamp"] 
+            # Use counter instead of measured time
+            valid_counter = 0
+            time_counter = 0
             
             rows_to_write = []
             # Collect data rows: use elapsed seconds from corrected start_time
@@ -218,15 +219,17 @@ def create_displacement_csv(event_data, event_folder, config):
                 # Check if 'sensor_data' and 'lvdt_data' exist and are not empty
                 if "sensor_data" in data and "lvdt_data" in data["sensor_data"] and data["sensor_data"]["lvdt_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    # Calculate time relative to the first data point's timestamp
-                    expected_time = (data["timestamp"] - start_time).total_seconds() 
-                    row = [timestamp, f"{expected_time:.6f}"]
+                    # Expected time from counter and expected LVDT rate
+                    time_value = time_counter * (1.0 / config.sampling_rate_lvdt)
+                    row = [timestamp, f"{time_value:.6f}"]
                     for lvdt in data["sensor_data"]["lvdt_data"]:
                         # Ensure lvdt dictionary has the required keys
                         voltage = lvdt.get('voltage', float('nan')) # Use NaN as default if key missing
                         displacement = lvdt.get('displacement', float('nan'))
                         row.extend([f"{voltage:.6f}", f"{displacement:.6f}"])
                     rows_to_write.append(row)
+                    valid_counter += 1
+                    time_counter += 1
                 else:
                     # Optionally log missing data or handle differently
                     logging.debug(f"Skipping data point due to missing LVDT data: {data.get('timestamp')}")
@@ -252,7 +255,7 @@ def create_acceleration_csv(event_data, event_folder, config):
             writer = csv.writer(f)
             
             # Create header
-            header = ['Timestamp', 'Expected_Time']
+            header = ['Timestamp', 'Time']  # Changed from 'Expected_Time'
             for i in range(config.num_accelerometers):
                 header.extend([f'Accel{i+1}_X', f'Accel{i+1}_Y', f'Accel{i+1}_Z', f'Accel{i+1}_Magnitude'])
             writer.writerow(header)
@@ -262,8 +265,9 @@ def create_acceleration_csv(event_data, event_folder, config):
                 logging.warning("No event data provided for acceleration CSV creation.")
                 return acceleration_file # Return empty file path
 
-            # Use the timestamp of the first data point as the reference start time (t=0)
-            start_time = event_data[0]["timestamp"] 
+            # Use counter instead of measured time
+            valid_counter = 0
+            time_counter = 0
             
             rows_to_write = []
             # Collect data rows: compute expected_time as elapsed seconds from corrected start_time
@@ -271,9 +275,9 @@ def create_acceleration_csv(event_data, event_folder, config):
                  # Check if 'sensor_data' and 'accel_data' exist and are not empty
                 if "sensor_data" in data and "accel_data" in data["sensor_data"] and data["sensor_data"]["accel_data"]:
                     timestamp = data["timestamp"].strftime('%Y-%m-%d %H:%M:%S.%f')
-                    # Calculate time relative to the first data point's timestamp
-                    expected_time = (data["timestamp"] - start_time).total_seconds() 
-                    row = [timestamp, f"{expected_time:.6f}"]
+                    # Expected time from counter and expected accelerometer rate
+                    time_value = time_counter * (1.0 / config.sampling_rate_acceleration)
+                    row = [timestamp, f"{time_value:.6f}"]
                     for accel in data["sensor_data"]["accel_data"]:
                         # Ensure accel dictionary has the required keys
                         x = accel.get('x', float('nan')) # Use NaN as default
@@ -292,6 +296,8 @@ def create_acceleration_csv(event_data, event_folder, config):
                             f"{magnitude:.6f}"
                         ])
                     rows_to_write.append(row)
+                    valid_counter += 1
+                    time_counter += 1
                 else:
                      # Optionally log missing data or handle differently
                     logging.debug(f"Skipping data point due to missing Accelerometer data: {data.get('timestamp')}")
