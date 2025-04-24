@@ -4,8 +4,6 @@
   <img src="https://github.com/estructuraPy/IdentiTwin/raw/main/identitwin.png" alt="IdentiTwin Logo" width="200"/>
 </p>
 
-A Python library for structural monitoring and vibration analysis, developed by ANM Ingeniería.
-
 ## Overview
 
 IdentiTwin is developed under the project ``Gemelo digital como herramienta de gestión del plan de conservación programada. Caso de estudio: foyer y fumadores del Teatro Nacional de Costa Rica``. The library provides comprehensive tools for structural vibration and displacement acquisition.
