@@ -361,7 +361,8 @@ def main():
     try:
         monitor_system.setup_sensors()
 
-        if config.enable_lvdt and monitor_system.lvdt_channels:
+        # Use hasattr to safely check if lvdt_channels exist and are not None
+        if config.enable_lvdt and hasattr(monitor_system, 'lvdt_channels') and monitor_system.lvdt_channels:
             calibration.initialize_lvdt(channels=monitor_system.lvdt_channels,
                                          slopes=LVDT_SLOPES,
                                          config=config)

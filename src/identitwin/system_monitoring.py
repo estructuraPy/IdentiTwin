@@ -69,6 +69,13 @@ class MonitoringSystem:
         self.last_status_time = 0
         self.status_interval = 2.0
 
+        # Initialize sensor attributes to avoid AttributeError
+        self.ads = None
+        self.lvdt_channels = None
+        self.accelerometers = None
+        self.status_led = None
+        self.activity_led = None
+
         # Add counters for consecutive I/O errors per accelerometer
         self.accel_io_error_counts = [0] * (config.num_accelerometers if config.enable_accel else 0)
         self.accel_io_error_log_threshold = 100 # Log every 100 errors after the first

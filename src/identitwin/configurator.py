@@ -230,11 +230,11 @@ class SystemConfig:
         # Check specifically if the LED class from gpiozero was imported successfully
         if LED is None:
             print("Warning: Cannot initialize LEDs, 'gpiozero' library not available or failed to import.")
-            return None, None
+            return NonFunctionalLED(self.gpio_pins[0]), NonFunctionalLED(self.gpio_pins[1])
         # Check if GPIO pins are configured
         if not self.gpio_pins or len(self.gpio_pins) < 2:
              print("Warning: Cannot initialize LEDs, GPIO pins not configured correctly.")
-             return None, None
+             return NonFunctionalLED(18), NonFunctionalLED(17) # Use default pin numbers for messages
 
         try:
             # Close any existing devices on these pins before creating new ones
@@ -272,8 +272,8 @@ class SystemConfig:
                 # Catch potential errors during LED object creation (e.g., invalid pin)
                 print(f"Warning: Could not initialize LEDs on specified pins: {e2}", file=sys.stderr)
                 print("LED functionality will be disabled")
-                # Return None if LED initialization fails
-                return None, None
+                # Return non-functional LEDs that log failures but don't crash
+                return NonFunctionalLED(self.gpio_pins[0]), NonFunctionalLED(self.gpio_pins[1])
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
@@ -385,6 +385,35 @@ class SystemConfig:
         print(f"Successfully created {len(mpu_list)} MPU6050 objects.")
         return mpu_list if mpu_list else None # Return list or None if empty
 
+# Add this class at the module level, after the imports
+class NonFunctionalLED:
+    """LED replacement when hardware initialization fails, preserves the interface."""
+    
+    def __init__(self, pin_number):
+        self.pin_number = pin_number
+        self.name = f"NonFunctional LED (pin {pin_number})"
+        print(f"WARNING: Using non-functional LED for pin {pin_number} - hardware control unavailable")
+        
+    def on(self):
+        """Turn on the LED - logs failure since this is non-functional."""
+        print(f"WARNING: Cannot turn on LED {self.pin_number} (hardware unavailable)")
+        
+    def off(self):
+        """Turn off the LED - logs failure since this is non-functional."""
+        print(f"WARNING: Cannot turn off LED {self.pin_number} (hardware unavailable)")
+        
+    def toggle(self):
+        """Toggle the LED - logs failure since this is non-functional."""
+        print(f"WARNING: Cannot toggle LED {self.pin_number} (hardware unavailable)")
+        
+    def blink(self, on_time=1, off_time=1, n=None, background=True):
+        """Simulate LED blinking - logs failure since this is non-functional."""
+        print(f"WARNING: Cannot blink LED {self.pin_number} (hardware unavailable)")
+        
+    def close(self):
+        """Close the LED - no-op since this is non-functional."""
+        pass
+
 # Utility functions
 def leds(gpio_pins):
     """Initialize LEDs connected to the specified GPIO pins."""
@@ -392,7 +421,7 @@ def leds(gpio_pins):
         return LED(gpio_pins[0]), LED(gpio_pins[1])
     except Exception as e:
         print(f"Warning: Could not initialize LEDs: {e}")
-        return None, None
+        return NonFunctionalLED(gpio_pins[0]), NonFunctionalLED(gpio_pins[1])
 
 
 def ads1115():
