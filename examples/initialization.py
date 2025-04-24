@@ -249,9 +249,14 @@ def create_system_config():
         min_event_duration=MIN_EVENT_DURATION
     )
     
-    # Configuración específica de los pines LVDT
-    import adafruit_ads1x15.ads1115 as ADS
-    config.lvdt_pin_config = [ADS.P0, ADS.P1]  # Asignar pines específicos para LVDTs
+    # Configure LVDT pins explicitly
+    try:
+        import adafruit_ads1x15.ads1115 as ADS
+
+        config.lvdt_pin_config = [ADS.P0, ADS.P1]
+        print(f"LVDT pins configured: {[0, 1]}")
+    except ImportError:
+        print("Warning: Could not import ADS1115 for pin configuration - using defaults")
     
     return config
 

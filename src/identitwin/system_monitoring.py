@@ -448,7 +448,27 @@ class MonitoringSystem:
                                 # Add delay before ALL channel readings (not just after first one)
                                 time.sleep(0.001)  # 1ms delay for ALL channels
                                 
-                                raw_voltage = ch.voltage
+                                # Check if channel is valid
+                                if ch is None:
+                                    print(f"Warning: LVDT channel {i+1} is None")
+                                    lvdt_data_list.append({'voltage': 0.0, 'displacement': 0.0})
+                                    continue
+                                
+                                # Try reading with a retry mechanism
+                                retry_count = 0
+                                max_retries = 3
+                                while retry_count < max_retries:
+                                    try:
+                                        raw_voltage = ch.voltage
+                                        # If voltage is exactly 0, this might indicate a connection issue
+                                        if abs(raw_voltage) < 1e-6:
+                                            print(f"Warning: LVDT {i+1} voltage is exactly zero, possible connection issue")
+                                        break
+                                    except Exception as retry_err:
+                                        retry_count += 1
+                                        if retry_count >= max_retries:
+                                            raise retry_err
+                                        time.sleep(0.002)  # Wait before retry
                                 
                                 # Get calibration for this LVDT from config
                                 if hasattr(self.config, 'lvdt_calibration') and i < len(self.config.lvdt_calibration):
@@ -653,6 +673,7 @@ class MonitoringSystem:
         state_event_count = state.get_event_variable("event_count", 0)
 
         current_event_count = max(event_count, state_event_count)
+        print("\n-------------------------------------------------------------------------------")
         print(f"\nEvents detected: {current_event_count}")
 
         if event_count != state_event_count:
@@ -666,7 +687,6 @@ class MonitoringSystem:
                 elapsed = time.time() - last_trigger
                 formatted_time = f"Recording event... ({elapsed:.1f}s elapsed)"
         print(f"Recording Status: {formatted_time}")
-        print("\n-------------------------------------------------------------------------------")
 
         if hasattr(self, "event_monitor"):
             avg_accel = self.event_monitor.moving_avg_accel

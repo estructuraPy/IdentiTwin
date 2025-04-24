@@ -283,20 +283,39 @@ class SystemConfig:
             # Use custom pin config if provided, otherwise use defaults
             if hasattr(self, 'lvdt_pin_config') and len(self.lvdt_pin_config) >= self.num_lvdts:
                 pins = self.lvdt_pin_config
+                print(f"Using custom LVDT pin configuration")
             else:
                 pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3][:self.num_lvdts]
+                print(f"Using default LVDT pin configuration: A0, A1")
+            
+            # Try to configure ADS1115 for higher reliability
+            try:
+                # Set higher data rate for better readings
+                ads.data_rate = 860  # Maximum data rate in SPS
+                # Set continuous conversion mode
+                ads.mode = 0  # 0 = Continuous conversion mode
+                print(f"Configured ADS1115: data_rate={ads.data_rate}, mode={ads.mode}, gain={ads.gain}")
+            except Exception as config_err:
+                print(f"Warning: Could not configure ADS1115 settings: {config_err}")
             
             for i in range(self.num_lvdts):
                 try:
+                    print(f"Initializing LVDT {i+1} on pin {i}")
                     channel = AnalogIn(ads, pins[i])
                     # Test reading
-                    _ = channel.voltage
+                    voltage = channel.voltage
+                    print(f"  - LVDT {i+1} initial voltage reading: {voltage:.4f}V")
                     channels.append(channel)
                 except Exception as ch_err:
                     print(f"Error initializing LVDT {i+1}: {ch_err}")
                     continue
                     
-            return channels if channels else None
+            if not channels:
+                print("No LVDT channels could be initialized")
+                return None
+            
+            print(f"Successfully created {len(channels)} LVDT channels")
+            return channels
             
         except Exception as e:
             print(f"Error creating LVDT channels: {e}", file=sys.stderr)
