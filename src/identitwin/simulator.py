@@ -11,6 +11,7 @@ import math
 import numpy as np
 import random  # Añadir esta importación
 
+
 # Clases dummy para simular hardware
 class DummyLED:
     def __init__(self, verbose=False):  # Default verbosity to False
@@ -75,41 +76,69 @@ class DummyMPU6050:
         self.addr = addr
         self._cycle_start_time = time.time()
         self._current_interval = self._generate_random_interval()
+        self.state = "noise"  # Estado inicial: solo ruido
+        self.transition_progress = 0  # Progreso de la transición (0 a 1)
 
     def _generate_random_interval(self):
-        """Generate a random interval between 5 and 30 seconds."""
-        return random.uniform(30, 60)
+        """Genera un intervalo aleatorio entre 20 y 40 segundos."""
+        return random.uniform(30, 35)
 
-    def _update_interval(self, t):
-        """Update the interval if the time exceeds the current interval."""
+    def _update_state(self, t):
+        """Actualiza el estado y reinicia el ciclo si se excede el intervalo."""
         if t >= self._current_interval:
-            self._cycle_start_time = time.time()  # Reset the cycle start time
-            self._current_interval = self._generate_random_interval()  # Generate a new random interval
+            self._cycle_start_time = time.time()
+            self._current_interval = self._generate_random_interval()
+            self.state = "periodic" if self.state == "noise" else "noise"
+            self.transition_progress = 0  # Reinicia la transición
 
-    def get_accel_data(self):
-        """Simulate accelerometer data with constant noise and periodic signals."""
+    def _apply_transition(self, value, transition_type):
+        """Aplica una transición suave o abrupta."""
+        if transition_type == "smooth":
+            # Usar una interpolación lineal
+            return value * (1 - self.transition_progress)
+        elif transition_type == "abrupt":
+            # Usar un cambio abrupto pero con cierta aleatoriedad
+            return value if self.transition_progress < 0.75 else 0
+        return value
+
+    def get_accel_data(self, transition_type="smooth"):
+        """Simula datos del acelerómetro con ruido constante y señales periódicas."""
         t = time.time() - self._cycle_start_time
-        
-        # Update the interval if needed
-        self._update_interval(t)
 
-        # Constant noise in all directions
-        noise_x = 0.005 * math.sin(t * 30) + 0.003 * math.sin(t * 50)
-        noise_y = 0.006 * math.cos(t * 25) + 0.004 * math.cos(t * 60)
-        noise_z = 0.007 * math.sin(t * 30) + 0.005 * math.cos(t * 40)
+        # Actualiza el estado si es necesario
+        self._update_state(t)
 
-        # Smooth periodic signals with gradual growth and decay
-        cyclic_factor = (math.sin(t / self._current_interval * math.pi) + 1) / 2  # Oscillates between 0 and 1
+        # Incrementa el progreso de la transición
+        self.transition_progress = min(self.transition_progress + 0.01, 1)  # Progreso en cada llamada
 
-        periodic_signal_x = cyclic_factor * (0.7 * math.sin(t * 35) + 0.2 * math.sin(t * 23))
-        periodic_signal_y = cyclic_factor * (0.5 * math.cos(t * 38) + 0.2 * math.cos(t * 24))
-        periodic_signal_z = cyclic_factor * (0.5 * math.sin(t * 42) + 0.4 * math.sin(t * 25))
+        # Ruido constante
+        noise_x = 0.005 * math.sin(t * 2 * math.pi * 50) + 0.003 * math.sin(t * 2 * math.pi * 80)
+        noise_y = 0.006 * math.cos(t * 2 * math.pi * 60) + 0.004 * math.cos(t * 2 * math.pi * 100)
+        noise_z = 0.007 * math.sin(t * 2 * math.pi * 70) + 0.005 * math.cos(t * 2 * math.pi * 90)
 
-        return {
-            'x': noise_x + periodic_signal_x,
-            'y': noise_y + periodic_signal_y,
-            'z': 9.81 + noise_z + periodic_signal_z  # Gravity + noise + periodic signals
-        }
+        if self.state == "periodic":
+            # Señales periódicas superpuestas
+            periodic_signal_x = 0.75 * math.sin(t * 2 * math.pi * 18) + 0.05 * math.sin(t * 2 * math.pi * 43)
+            periodic_signal_y = 0.05 * math.cos(t * 2 * math.pi * 19) + 0.55 * math.cos(t * 2 * math.pi * 42)
+            periodic_signal_z = 0.75 * math.sin(t * 2 * math.pi * 21) + 0.05 * math.sin(t * 2 * math.pi * 40)
+
+            # Aplica la transición a las señales periódicas
+            periodic_signal_x = self._apply_transition(periodic_signal_x, transition_type)
+            periodic_signal_y = self._apply_transition(periodic_signal_y, transition_type)
+            periodic_signal_z = self._apply_transition(periodic_signal_z, transition_type)
+
+            return {
+                'x': noise_x + periodic_signal_x,
+                'y': noise_y + periodic_signal_y,
+                'z': 9.81 + noise_z + periodic_signal_z  # Gravedad + ruido + señales periódicas
+            }
+        else:
+            # Solo ruido
+            return {
+                'x': noise_x,
+                'y': noise_y,
+                'z': 9.81 + noise_z  # Gravedad + ruido
+            }
 
         
 # Clase de configuración simulada
