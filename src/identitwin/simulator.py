@@ -17,14 +17,48 @@ warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
 class DummyLED:
     def __init__(self, verbose=False):  # Default verbosity to False
         self.verbose = verbose  # Control whether messages are printed
+        self.state = False  # Track LED state: False = off, True = on
 
+    def on(self):
+        """Turn on the LED."""
+        self.state = True
+        if self.verbose:
+            print("DummyLED on")
+    
     def off(self):
+        """Turn off the LED."""
+        self.state = False
         if self.verbose:
             print("DummyLED off")
 
     def toggle(self):
+        """Toggle the LED state."""
+        self.state = not self.state
         if self.verbose:
-            print("DummyLED toggled")  # Simulate toggling the LED
+            print(f"DummyLED toggled to {'on' if self.state else 'off'}")
+
+    def blink(self, on_time=1, off_time=1, n=1, background=False):
+        """
+        Simulate LED blinking.
+        
+        Args:
+            on_time: Time in seconds the LED is on for each blink
+            off_time: Time in seconds the LED is off for each blink
+            n: Number of blinks
+            background: Whether to blink in the background
+        """
+        if self.verbose:
+            print(f"DummyLED blink: on_time={on_time}, off_time={off_time}, n={n}, background={background}")
+        
+        # For background blinking, just return immediately
+        if not background:
+            # Only for non-background blinking: toggle the LED state n times
+            for _ in range(n):
+                self.on()
+                time.sleep(on_time)
+                self.off()
+                if _ < n - 1:  # Don't sleep after the last blink
+                    time.sleep(off_time)
 
 class DummyADS:
     def __init__(self):

@@ -146,9 +146,8 @@ class SystemConfig:
         self.window_duration = 5  # seconds
         self.gravity = 9.81  # m/s^2
 
-        # Maximum allowable jitter (ms) - more realistic values
-        self.max_accel_jitter = 1.5  # 1.5ms maximum jitter for accelerometers (1.5% at 100Hz)
-        self.max_lvdt_jitter = 5.0  # 5ms maximum jitter for LVDT (2.5% at 5Hz)
+        self.max_accel_jitter = 1.5
+        self.max_lvdt_jitter = 5.0
 
         # Set thresholds - use more reasonable values to prevent too many events
         self.trigger_acceleration_threshold = (
@@ -238,6 +237,11 @@ class SystemConfig:
              return None, None
 
         try:
+            # Close any existing devices on these pins before creating new ones
+            # Import the internal function for device cleanup
+            from gpiozero.devices import _pins_shutdown
+            _pins_shutdown() # This releases all pins
+            
             # Initialize real LEDs using gpiozero
             print(f"Attempting to initialize LEDs on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             status_led = LED(self.gpio_pins[0])
@@ -247,10 +251,29 @@ class SystemConfig:
             print("LEDs initialized successfully.")
             return status_led, activity_led
         except Exception as e:
-            # Catch potential errors during LED object creation (e.g., invalid pin)
-            print(f"Warning: Could not initialize LEDs on specified pins: {e}", file=sys.stderr)
-            # Return None if LED initialization fails
-            return None, None
+            # If that fails, try an alternative approach with individual pin cleanup
+            try:
+                print(f"First LED initialization attempt failed: {e}")
+                print("Trying alternative approach...")
+                
+                from importlib import reload
+                import gpiozero
+                reload(gpiozero)
+                
+                # Try again with fresh imports
+                from gpiozero import LED
+                status_led = LED(self.gpio_pins[0])
+                activity_led = LED(self.gpio_pins[1])
+                status_led.off()
+                activity_led.off()
+                print("LEDs initialized successfully with alternative method.")
+                return status_led, activity_led
+            except Exception as e2:
+                # Catch potential errors during LED object creation (e.g., invalid pin)
+                print(f"Warning: Could not initialize LEDs on specified pins: {e2}", file=sys.stderr)
+                print("LED functionality will be disabled")
+                # Return None if LED initialization fails
+                return None, None
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
