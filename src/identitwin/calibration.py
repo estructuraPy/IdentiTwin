@@ -22,7 +22,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
 
     Args:
         channels: List of LVDT channel objects with a 'voltage' attribute.
-        slopes: List of slopes (mm/V) for each LVDT. Defaults to 19.86 mm/V.
+        slopes: List of slopes (mm/V) for each LVDT.
         config: System configuration object for saving calibration data.
 
     Returns:
@@ -35,7 +35,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
     print("Calibrating LVDTs", flush=True)
     for i, channel in enumerate(channels):
         try:
-            slope = slopes[i] if slopes else 19.86
+            slope = slopes[i]
             lvdt_system = zeroing_lvdt(channel, slope, label=f"LVDT-{i+1}")
             lvdt_systems.append(lvdt_system)
             if config:
@@ -124,21 +124,21 @@ def calibrate_accelerometer(data, offsets):
 
     Returns:
         Dictionary with calibrated 'x', 'y', 'z' values.
+        
+    Raises:
+        ValueError: If required data components or calibration parameters are missing.
+        Exception: If calibration fails for any other reason.
     """
-    try:
-        calibrated_data = data.copy()
-        if not all(k in data for k in ['x', 'y', 'z']):
-            raise ValueError("Missing acceleration components.")
-        if not all(k in offsets for k in ['x', 'y', 'z', 'scaling_factor']):
-            raise ValueError("Missing calibration parameters.")
-        scaling_factor = offsets["scaling_factor"]
-        calibrated_data["x"] = (data["x"] + offsets["x"]) * scaling_factor
-        calibrated_data["y"] = (data["y"] + offsets["y"]) * scaling_factor
-        calibrated_data["z"] = (data["z"] + offsets["z"]) * scaling_factor
-        return calibrated_data
-    except Exception as e:
-        print(f"Warning: Error calibrating accelerometer: {e}")
-        return {"x": 0.0, "y": 0.0, "z": 0.0}
+    calibrated_data = data.copy()
+    if not all(k in data for k in ['x', 'y', 'z']):
+        raise ValueError("Missing acceleration components.")
+    if not all(k in offsets for k in ['x', 'y', 'z', 'scaling_factor']):
+        raise ValueError("Missing calibration parameters.")
+    scaling_factor = offsets["scaling_factor"]
+    calibrated_data["x"] = (data["x"] + offsets["x"]) * scaling_factor
+    calibrated_data["y"] = (data["y"] + offsets["y"]) * scaling_factor
+    calibrated_data["z"] = (data["z"] + offsets["z"]) * scaling_factor
+    return calibrated_data
 
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
     """
