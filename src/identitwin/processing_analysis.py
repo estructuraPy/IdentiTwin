@@ -318,6 +318,10 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                     else:
                         ax_fft.set_ylim(1e-6, 1e2)  # Default fallback
                     
+                    # After plotting FFT data, force plain numeric tick formatting to avoid mathtext errors
+                    from matplotlib.ticker import FormatStrFormatter
+                    ax_fft.yaxis.set_major_formatter(FormatStrFormatter('%.4f'))
+                    
                 fig.suptitle(f'Accelerometer {accel_idx+1} Analysis - {timestamp_str}\nTotal Duration: {total_duration:.2f}s', fontsize=14, y=0.995)
                 plt.tight_layout(rect=[0, 0, 1, 0.97])
                 accel_filename = f"{os.path.splitext(filename)[0]}_accel{accel_idx+1}.png"

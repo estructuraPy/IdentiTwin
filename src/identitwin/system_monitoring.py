@@ -644,7 +644,7 @@ class MonitoringSystem:
                             y = accel.get('y', 0.0)
                             z = accel.get('z', 0.0)
                             mag = np.sqrt(x*x + y*y + z*z)
-                            print(f"  Accel{i+1}: X={x:.3f} Y={y:.3f} Z={z:.3f} (Mag: {mag:.3f}) m/s²")
+                            print(f"  Accel{i+1}: X={x:.3f} Y={y:.3f} Z={z:.3f} (Mag: {mag:.3f}) m/s^2")
                 else:
                     print("  Waiting for accelerometer data...")
             else:
@@ -673,7 +673,7 @@ class MonitoringSystem:
             avg_disp = self.event_monitor.moving_avg_disp
             detrig_accel = self.config.detrigger_acceleration_threshold
             detrig_disp = self.config.detrigger_displacement_threshold
-            print(f"Acceleration Moving Average: {avg_accel:.3f} (detrigger: {detrig_accel:.3f}m/s²)")
+            print(f"Acceleration Moving Average: {avg_accel:.3f} (detrigger: {detrig_accel:.3f}m/s^2)")
             print(f"Displacement Moving Average: {avg_disp:.3f} (detrigger: {detrig_disp:.3f}mm)")
 
         print("\n===============================================================================")

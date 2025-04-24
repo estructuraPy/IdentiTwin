@@ -66,7 +66,7 @@ class SystemConfig:
         output_dir=None,
         num_lvdts=2,
         num_accelerometers=2,
-        sampling_rate_acceleration=200.0,  # Accept any provided value
+        sampling_rate_acceleration=100.0,  # Accept any provided value
         sampling_rate_lvdt=5.0,           # Accept any provided value
         plot_refresh_rate=10.0,           # Accept any provided value
         gpio_pins=None,
@@ -158,7 +158,7 @@ class SystemConfig:
         self.lvdt_scale_factor = 0.1875  # Constant for voltage conversion (mV)
         self.lvdt_slope = 19.86  # Default slope in mm/V
         self.lvdt_intercept = 0.0  # Default intercept
-        # *** NUEVO: Inicializar la lista para almacenar resultados de calibración ***
+        # New: initialize list to hold calibration results
         self.lvdt_calibration = []
 
         # Accelerometer configuration (from initialization.py)
@@ -349,7 +349,7 @@ def ads1115():
     try:
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS.ADS1115(i2c)
-        ads.gain = 2.0 / 3.0  # Se puede ajustar el gain según sea necesario
+        ads.gain = 2.0 / 3.0  # Gain can be adjusted as needed
         return ads
     except Exception as e:
         print(f"Error initializing ADS1115: {e}")

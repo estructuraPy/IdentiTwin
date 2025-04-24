@@ -11,7 +11,6 @@ Key Features:
 - Pre-trigger and post-trigger data buffering
 - Event data persistence and analysis
 - Multi-threaded event processing
-- Moving average filtering for noise reduction
 - Adaptive trigger/detrigger mechanism
 
 Classes:
@@ -86,7 +85,6 @@ class EventMonitor:
         self.pre_trigger_buffer = deque(maxlen=pre_trigger_samples)
         self.last_trigger_time = 0
 
-        # Initialize moving averages with deque buffers based on MEASURED rate
         if accel_rate > 0:
              window_size_accel = int(0.5 * accel_rate) # 0.5 seconds of samples
         else:
@@ -108,8 +106,8 @@ class EventMonitor:
         
         self.error_count = 0
         self.max_errors = 100  # Maximum number of consecutive errors before warning
-        self.finalize_thread_started = False  # Nuevo: evita múltiples lanzamientos
-        self.event_start_ts = None  # Nuevo: timestamp al detectar trigger
+        self.finalize_thread_started = False  # Prevent multiple thread launches
+        self.event_start_ts = None  # Store trigger timestamp
 
     def detect_event(self, sensor_data):
         """Detect and record event data using trigger/detrigger mechanism."""
@@ -154,7 +152,6 @@ class EventMonitor:
                 return self._handle_event_trigger(sensor_data, current_time, magnitude, instantaneous_disp)
             elif self.in_event_recording:
                 return self._handle_event_recording(sensor_data, current_time)
-                
             return True
 
         except Exception as e:
@@ -176,7 +173,7 @@ class EventMonitor:
                 state.set_event_variable("last_trigger_time", current_time)
                 # Initialize current_event_data with the full pre_trigger_buffer content
                 self.current_event_data = list(self.pre_trigger_buffer) 
-                self.event_start_ts = sensor_data["timestamp"]  # Guardar ts de trigger
+                self.event_start_ts = sensor_data["timestamp"]  # Store trigger timestamp
             
             # Append the triggering data point if it's not already the last one from the buffer
             if not self.current_event_data or sensor_data != self.current_event_data[-1]:
@@ -193,23 +190,23 @@ class EventMonitor:
             self.current_event_data.append(sensor_data)
             post_trigger_time = self.thresholds.get("post_event_time", 15.0)
 
-            # Solo al cumplirse post_event_time y si no se ha lanzado el hilo
+            # Only when post_event_time is met and background thread not started
             if (current_time - self.last_trigger_time > post_trigger_time
                     and not self.finalize_thread_started):
                 data_to_save = list(self.current_event_data)
-                start_ts = self.event_start_ts  # Usar timestamp del trigger
+                start_ts = self.event_start_ts  # Use trigger timestamp
 
-                # Marca que ya se lanzó el hilo y no permitirá más lanzamientos
+                # Mark that the thread has been started and prevent further launches
                 self.finalize_thread_started = True
 
-                # Lanzar hilo demonio para guardar y plotear
+                # Launch daemon thread to save and plot
                 threading.Thread(
                     target=self._finalize_record_event,
                     args=(data_to_save, start_ts),
                     daemon=True
                 ).start()
 
-            # No procesar más datos durante el post-evento
+            # Do not process more data during post-event
             return False  
         except Exception as e:
             logging.error(f"Error in event recording handling: {e}")
@@ -217,13 +214,13 @@ class EventMonitor:
             return False
 
     def _finalize_record_event(self, complete_event_data, start_time):
-        """Hilo de fondo que espera el post_event_time y luego guarda datos y plots."""
+        """Background thread: wait post_event_time then save data and generate plots."""
         try:
-            time.sleep(0.5)  # margen extra
+            time.sleep(0.5)  # extra margin
 
             # ...existing code to drain buffer and collect data...
 
-            # Guardar y generar informes/gráficas
+            # Save and generate reports/plots
             saved = self._save_event_data(complete_event_data, start_time)
             if saved:
                 self.event_count_ref[0] += 1
@@ -233,11 +230,11 @@ class EventMonitor:
             logging.error(f"Error in background finalize: {e}")
             traceback.print_exc()
         finally:
-            # Ahora sí reiniciar estado tras completar guardado
+            # Now reset state after completing save
             self.in_event_recording = False
             state.set_event_variable("is_event_recording", False)
-            self.finalize_thread_started = False  # Permite nuevo evento futuro
-            self.event_start_ts = None  # Resetear timestamp de inicio
+            self.finalize_thread_started = False  # Allow new future event
+            self.event_start_ts = None  # Reset start timestamp
 
     def event_monitoring_thread(self):
         """Thread function for monitoring events."""
@@ -383,7 +380,7 @@ class EventMonitor:
     def _finalize_event(self):
         """Helper method to finalize and save event data."""
         try:
-            event_time = self.event_start_ts  # Usar timestamp del trigger
+            event_time = self.event_start_ts  # Use trigger timestamp
             if self._save_event_data(self.current_event_data, event_time):
                 # Only increment counter if event was successfully saved
                 self.event_count_ref[0] += 1
@@ -399,7 +396,7 @@ class EventMonitor:
         self.last_detrigger_time = 0
         self.min_duration_met = False
         state.set_event_variable("is_event_recording", False)
-        self.event_start_ts = None  # Resetear timestamp de inicio
+        self.event_start_ts = None  # Reset start timestamp
 
 def print_event_banner():
     """Print a  banner when the event starts"""
