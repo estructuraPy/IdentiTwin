@@ -69,7 +69,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
             
             slope = slopes[i]
             intercept = -slope * voltage
-            print(f" - LVDT{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+            print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
             
             # Create dictionary with calibration parameters
             lvdt_system = {
@@ -83,7 +83,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
             
             # Test if the calibration produces reasonable values
             test_displacement = slope * voltage + intercept
-            print(f" - LVDT{i+1} test reading: {test_displacement:.4f}mm (should be near zero)")
+            print(f" - LVDT-{i+1} test reading: {test_displacement:.4f}mm (should be near zero)")
             
             if config:
                 if not hasattr(config, 'lvdt_calibration'):
@@ -158,8 +158,8 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
             z_avg = np.mean(z_samples)
             offset = {'x': -x_avg, 'y': -y_avg, 'z': -z_avg}
             offsets.append(offset)
-            label = f"MPU6050{i+1} (Accel{i+1})"
-            print(f" - {label} calibrated offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f} (magnitude should be near GRAVITY)")
+            label = f"Accel-{i+1}"
+            print(f" - {label} offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f} (should be near GRAVITY)")
         else:
             # Removing default values - each sensor must be properly calibrated
             print(f"Warning: Could not collect data for Accelerometer-{i+1}. Calibration failed.")
