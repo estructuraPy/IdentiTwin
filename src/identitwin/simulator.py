@@ -166,6 +166,7 @@ class SimulatorConfig:
         output_dir=None,
         num_lvdts=2,
         num_accelerometers=2,
+        lvdt_slopes=None,  # Add the lvdt_slopes parameter here
         sampling_rate_acceleration=100.0,
         sampling_rate_lvdt=5.0,
         plot_refresh_rate=10.0,

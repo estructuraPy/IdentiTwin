@@ -240,6 +240,7 @@ def create_system_config():
         output_dir=None,
         num_lvdts=NUM_LVDTS,
         num_accelerometers=NUM_ACCELS,
+        lvdt_slopes=LVDT_SLOPES,
         gpio_pins=None,
         trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
         detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
@@ -247,8 +248,8 @@ def create_system_config():
         detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
         pre_event_time=PRE_EVENT_TIME,
         post_event_time=POST_EVENT_TIME,
-        min_event_duration=MIN_EVENT_DURATION
-    )
+        min_event_duration=MIN_EVENT_DURATION,
+        )
     
     # Configure LVDT pins explicitly
     try:
@@ -310,6 +311,7 @@ def main():
         pre_event_time=PRE_EVENT_TIME,
         post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION,
+        lvdt_slopes=LVDT_SLOPES
     )
     
     # Assign LVDT slopes as an attribute after creating the config object
@@ -400,4 +402,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
