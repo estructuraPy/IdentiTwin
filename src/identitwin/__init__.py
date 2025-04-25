@@ -1,5 +1,13 @@
 """
-IdentiTwin - Structural Vibration Monitoring Library
+===============================================================================
+                  IdentiTwin Structural Monitoring System
+===============================================================================
+
+Developed by:
+    - Ing. Angel Navarro-Mora M.Sc, Escuela de Ingeniería en Construcción
+    - Alvaro Perez-Mora, Escuela de Ingeniería Electrónica
+
+Instituto Tecnologico de Costa Rica, 2025
 
 This library provides tools for monitoring structural vibrations using
 LVDT sensors and accelerometers.

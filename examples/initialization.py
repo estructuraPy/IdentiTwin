@@ -81,13 +81,13 @@ def print_banner():
                   IdentiTwin Structural Monitoring System
 ===============================================================================
 
-    Developed by:
-     - Ing. Angel Navarro-Mora M.Sc, Escuela de Ingeniería en Construcción
-     - Alvaro Perez-Mora, Escuela de Ingeniería Electrónica
+Developed by:
+    - Ing. Angel Navarro-Mora M.Sc, Escuela de Ingeniería en Construcción
+    - Alvaro Perez-Mora, Escuela de Ingeniería Electrónica
 
-    Instituto Tecnologico de Costa Rica, 2025
+Instituto Tecnologico de Costa Rica, 2025
 
-    """
+"""
     print(banner)
     time.sleep(2)
 
@@ -368,7 +368,6 @@ def main():
 
         monitor_system.start_monitoring()
 
-        print("\nMonitoring active. Press Ctrl+C to exit.")
         while monitor_system.running:
             if monitor_system.status_led:
                 try:

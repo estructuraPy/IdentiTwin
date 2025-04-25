@@ -297,18 +297,17 @@ class SystemConfig:
             return None
 
         mpu_list = []
-        print(f"Attempting to initialize {self.num_accelerometers} accelerometers...")
+        print(f"\nInitialize {self.num_accelerometers} accelerometers...")
         for i in range(self.num_accelerometers):
             addr = 0x68 + i  # Assumes sensors on consecutive I2C addresses (0x68, 0x69, ...)
             try:
                 # Instantiate mpu6050 directly with the address
-                print(f"  Attempting to initialize MPU6050 at address {hex(addr)}...")
+                print(f"- Initialize MPU6050 at address {hex(addr)}...")
                 mpu = mpu6050(addr)
 
                 # Optional: Add a quick check to see if the sensor is responsive
                 try:
                     temp = mpu.get_temp()  # Try reading temperature
-                    print(f"  MPU6050 at {hex(addr)} initialized successfully (Temp: {temp:.1f}C).")
                     mpu_list.append(mpu)
                 except OSError as comm_err:
                     print(f"  Warning: Could not communicate with MPU6050 at address {hex(addr)}: {comm_err}. Skipping this sensor.", file=sys.stderr)
@@ -317,7 +316,6 @@ class SystemConfig:
                 print(f"  Error initializing MPU6050 at address {hex(addr)}: {e}. Skipping this sensor.", file=sys.stderr)
                 continue  # Continue trying other sensors even if one fails
 
-        print(f"Successfully created {len(mpu_list)} MPU6050 objects.")
         return mpu_list if mpu_list else None  # Return list or None if empty
 
 class NonFunctionalLED:

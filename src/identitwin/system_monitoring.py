@@ -127,7 +127,7 @@ class MonitoringSystem:
                 if self.ads:
                     self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
                     if self.lvdt_channels:
-                        print(f"LVDT channels initialized successfully. Found {len(self.lvdt_channels)} channels.")
+                        print(f"LVDT channels initialized successfully.")
                         # Calibrate LVDTs
                         
                         # Get slopes from configuration without any default fallbacks
@@ -186,7 +186,6 @@ class MonitoringSystem:
             else:
                 print("Accelerometer setup skipped (disabled in configuration).")
 
-            print("\n--- Sensor setup completed successfully ---\n")
             self.sensors_initialized = True  # Set sensors_initialized to True after successful setup
 
         except Exception as e:
@@ -379,8 +378,6 @@ class MonitoringSystem:
             last_accel_actual_time = None
             last_lvdt_actual_time = None
 
-            print("\n--- Data acquisition thread started ---")
-
             while self.running:
                 now = time.perf_counter()
                 sensor_data_packet = None
@@ -505,11 +502,6 @@ class MonitoringSystem:
                                 slope = calib['slope']
                                 intercept = calib['intercept']
                                 disp = slope * raw_voltage + intercept
-                                
-                                # Debug print for ALL LVDTs, not just the first one
-                                # Print every 50 samples for each LVDT
-                                if lvdt_sample_count % 50 == 0:
-                                    print(f"DEBUG system monitoring LVDT{i+1}: V={raw_voltage:.4f}V, slope={slope:.4f}, intercept={intercept:.4f}, disp={disp:.4f}mm")
                                 
                                 lvdt_data_list.append({
                                     'voltage': raw_voltage,
@@ -748,7 +740,7 @@ class MonitoringSystem:
 
         print("\n===============================================================================")
         print("---  Press 'Ctrl + C' to stop monitoring ---")
-        print("===============================================================================\n \n \n \n")
+        print("===============================================================================\n \n")
 
     def _format_elapsed_time(self, elapsed_seconds):
         """

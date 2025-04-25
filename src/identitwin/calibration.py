@@ -43,8 +43,6 @@ def initialize_lvdt(channels, slopes=None, config=None):
     # Only use the required number of slopes
     if len(slopes) > len(channels):
         slopes = slopes[:len(channels)]
-    
-    print(f"Using slopes: {[f'{s:.2f}' for s in slopes]}")
 
     lvdt_systems = []
     print("\nCalibrating LVDTs...")
@@ -71,7 +69,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
             
             slope = slopes[i]
             intercept = -slope * voltage
-            print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+            print(f" - LVDT{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
             
             # Create dictionary with calibration parameters
             lvdt_system = {
@@ -85,7 +83,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
             
             # Test if the calibration produces reasonable values
             test_displacement = slope * voltage + intercept
-            print(f" - LVDT-{i+1} test reading: {test_displacement:.4f}mm (should be near zero)")
+            print(f" - LVDT{i+1} test reading: {test_displacement:.4f}mm (should be near zero)")
             
             if config:
                 if not hasattr(config, 'lvdt_calibration'):
@@ -98,14 +96,7 @@ def initialize_lvdt(channels, slopes=None, config=None):
             # Removing default values - each sensor must be properly calibrated
             print(f"LVDT-{i+1} calibration failed. This sensor must be calibrated before use.")
             lvdt_systems.append(None)
-    
-    # Final summary after calibration
-    print("\nLVDT Calibration Summary:")
-    for i, lvdt in enumerate(lvdt_systems):
-        if lvdt:
-            print(f" - LVDT-{i+1}: Calibrated successfully")
-        else:
-            print(f" - LVDT-{i+1}: Calibration FAILED")
+
     
     if config:
         _save_calibration_data(config, lvdt_systems=lvdt_systems)
@@ -147,7 +138,7 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     if not mpu_list:
         return None
     
-    print("Calibrating accelerometers...", flush=True)
+    print("\nCalibrating accelerometers...", flush=True)
     offsets = []
     for i, mpu in enumerate(mpu_list):
         x_samples, y_samples, z_samples = [], [], []
@@ -167,8 +158,8 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
             z_avg = np.mean(z_samples)
             offset = {'x': -x_avg, 'y': -y_avg, 'z': -z_avg}
             offsets.append(offset)
-            label = f"Accelerometer-{i+1}"
-            print(f" - {label} calibrated offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f}")
+            label = f"MPU6050{i+1} (Accel{i+1})"
+            print(f" - {label} calibrated offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f} (magnitude should be near GRAVITY)")
         else:
             # Removing default values - each sensor must be properly calibrated
             print(f"Warning: Could not collect data for Accelerometer-{i+1}. Calibration failed.")
