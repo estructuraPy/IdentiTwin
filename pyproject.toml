@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.34"
+version = "0.0.35"
 description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
@@ -29,6 +29,7 @@ dependencies = [
     "smbus>=1.1.post2",
     "pyserial>=3.5",
     "pandas>=2.2.3",
+    "scipy>=1.12.0",  # Added for better signal filtering capabilities
 ]
 
 [tool.setuptools]

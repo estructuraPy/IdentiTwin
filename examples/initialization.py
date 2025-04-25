@@ -309,8 +309,13 @@ def main():
         detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
         pre_event_time=PRE_EVENT_TIME,
         post_event_time=POST_EVENT_TIME,
-        min_event_duration=MIN_EVENT_DURATION
+        min_event_duration=MIN_EVENT_DURATION,
     )
+    
+    # Assign LVDT slopes as an attribute after creating the config object
+    config.lvdt_slopes = LVDT_SLOPES
+    print(f"LVDT slopes configured: {LVDT_SLOPES}")
+    
     # keep originals for printouts
     config.expected_sampling_rate_acceleration = config.sampling_rate_acceleration
     config.expected_sampling_rate_lvdt        = config.sampling_rate_lvdt
@@ -395,4 +400,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    

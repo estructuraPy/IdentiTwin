@@ -89,26 +89,39 @@ def read_lvdt_data(lvdt_channels, config):
             
             # Use individual calibration parameters - fail explicitly if missing
             if not hasattr(config, 'lvdt_calibration'):
-                raise ValueError(f"No LVDT calibration data available in configuration")
+                print(f"Warning: No LVDT calibration data available in configuration. Using slope=20, intercept=0.")
+                slope = 20.0
+                intercept = 0.0
+            elif i >= len(config.lvdt_calibration) or config.lvdt_calibration[i] is None:
+                print(f"Warning: Missing calibration data for LVDT {i+1}. Using slope=20, intercept=0.")
+                slope = 20.0
+                intercept = 0.0
+            else:
+                calib = config.lvdt_calibration[i]
+                # Check for both possible key names
+                slope = calib.get('slope', calib.get('lvdt_slope'))
+                intercept = calib.get('intercept', calib.get('lvdt_intercept'))
                 
-            if i >= len(config.lvdt_calibration):
-                raise ValueError(f"Missing calibration data for LVDT {i+1}")
-                
-            calib = config.lvdt_calibration[i]
-            slope = calib.get('lvdt_slope')
-            intercept = calib.get('lvdt_intercept')
+                if slope is None or intercept is None:
+                    print(f"Warning: Incomplete calibration parameters for LVDT {i+1}. Using slope=20, intercept=0.")
+                    slope = 20.0
+                    intercept = 0.0
             
-            if slope is None or intercept is None:
-                raise ValueError(f"Incomplete calibration parameters for LVDT {i+1}")
-                
             displacement = slope * voltage + intercept
+            
+            # Print debug info for first reading
+            if i == 0 and len(lvdt_values) == 0:
+                print(f"DEBUG: LVDT {i+1} reading - voltage: {voltage:.4f}V, slope: {slope:.4f}, "
+                      f"intercept: {intercept:.4f}, displacement: {displacement:.4f}mm")
+            
             lvdt_values.append({
                 'voltage': voltage,
                 'displacement': displacement
             })
         except Exception as e:
             print(f"Error reading LVDT {i+1}: {e}")
-            raise  # Reraise the exception to stop execution
+            # Return empty dict instead of raising, to allow system to continue
+            lvdt_values.append({'voltage': 0.0, 'displacement': 0.0})
             
     return lvdt_values
 

@@ -83,9 +83,9 @@ class MonitoringSystem:
 
         self.performance_stats = {
             "accel_timestamps": deque(maxlen=50000),
-            "lvdt_timestamps": deque(maxlen=50000),
+            "lvdt_timestamps": deque(maxlen=10000),
             "accel_periods": deque(maxlen=50000),
-            "lvdt_periods": deque(maxlen=50000),
+            "lvdt_periods": deque(maxlen=10000),
             "last_accel_time": None,
             "last_lvdt_time": None,
             "sampling_rate_acceleration": 0.0,
@@ -127,14 +127,36 @@ class MonitoringSystem:
                 if self.ads:
                     self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
                     if self.lvdt_channels:
-                        print("LVDT channels initialized successfully.")
+                        print(f"LVDT channels initialized successfully. Found {len(self.lvdt_channels)} channels.")
                         # Calibrate LVDTs
-                        slopes = [19.86, 21.86][:len(self.lvdt_channels)]
-                        self.lvdt_calibration = calibration.initialize_lvdt(
-                            channels=self.lvdt_channels,
-                            slopes=slopes
-                        )
-                        print("LVDT calibration complete.")
+                        
+                        # Get slopes from configuration without any default fallbacks
+                        lvdt_slopes = getattr(self.config, 'lvdt_slopes', None)
+                        
+                        # Error out if slopes are not provided - no defaults allowed
+                        if lvdt_slopes is None:
+                            raise ValueError("LVDT slopes must be provided in configuration from initialization.py")
+                            
+                        # Error out if not enough slopes are provided - no defaults allowed
+                        if len(lvdt_slopes) < len(self.lvdt_channels):
+                            raise ValueError(f"Not enough LVDT slopes provided in configuration. Need {len(self.lvdt_channels)} slopes, but only got {len(lvdt_slopes)}.")
+                        
+                        # Trim slopes if more provided than needed (this is still allowed)
+                        if len(lvdt_slopes) > len(self.lvdt_channels):
+                            lvdt_slopes = lvdt_slopes[:len(self.lvdt_channels)]
+                            print(f"Note: More slopes provided ({len(self.config.lvdt_slopes)}) than LVDT channels ({len(self.lvdt_channels)}). Using only the first {len(self.lvdt_channels)}.")
+                        
+                        # Initialize LVDTs with the explicitly provided slopes only
+                        try:
+                            self.lvdt_calibration = calibration.initialize_lvdt(
+                                channels=self.lvdt_channels,
+                                slopes=lvdt_slopes,
+                                config=self.config
+                            )
+                            print("LVDT calibration complete.")
+                        except ValueError as e:
+                            print(f"Error during LVDT calibration: {e}")
+                            raise
                     else:
                         print("Failed to initialize LVDT channels.")
                 else:
@@ -484,6 +506,11 @@ class MonitoringSystem:
                                 intercept = calib['intercept']
                                 disp = slope * raw_voltage + intercept
                                 
+                                # Debug print for ALL LVDTs, not just the first one
+                                # Print every 50 samples for each LVDT
+                                if lvdt_sample_count % 50 == 0:
+                                    print(f"DEBUG system monitoring LVDT{i+1}: V={raw_voltage:.4f}V, slope={slope:.4f}, intercept={intercept:.4f}, disp={disp:.4f}mm")
+                                
                                 lvdt_data_list.append({
                                     'voltage': raw_voltage,
                                     'displacement': disp
@@ -511,6 +538,11 @@ class MonitoringSystem:
                             'sensor_type': 'lvdt',
                             'sensor_data': {'lvdt_data': lvdt_data_list}
                         }
+                        
+                        # Update display buffer with latest LVDT data
+                        self.display_buffer['lvdt_data'] = lvdt_data_list
+                        self.display_buffer['last_update'] = time.time()
+                        
                         lvdt_sample_count += 1
                         next_lvdt_time = loop_start_time + lvdt_sample_count * lvdt_interval
                         data_acquired = True
@@ -642,10 +674,23 @@ class MonitoringSystem:
 
         if self.config.enable_lvdt:
             print("\nLVDT Status:")
-            for i, reading in enumerate(self.last_lvdt_readings):
-                disp = reading.get('displacement', float('nan'))
-                volt = reading.get('voltage', float('nan'))
-                print(f"  LVDT{i+1}: {disp:.3f}mm ({volt:.3f}V)")
+            # First try to use the most recent display buffer data
+            now = time.time()
+            buffer_age = now - self.display_buffer.get('last_update', 0)
+            
+            if buffer_age <= self.display_buffer.get('buffer_max_age', 0.5) and 'lvdt_data' in self.display_buffer:
+                lvdt_data = self.display_buffer['lvdt_data']
+                for i, reading in enumerate(lvdt_data):
+                    if isinstance(reading, dict):
+                        disp = reading.get('displacement', float('nan'))
+                        volt = reading.get('voltage', float('nan'))
+                        print(f"  LVDT{i+1}: {disp:.3f}mm ({volt:.3f}V)")
+            else:
+                # Fall back to last_lvdt_readings if buffer data is too old
+                for i, reading in enumerate(self.last_lvdt_readings):
+                    disp = reading.get('displacement', float('nan'))
+                    volt = reading.get('voltage', float('nan'))
+                    print(f"  LVDT{i+1}: {disp:.3f}mm ({volt:.3f}V)")
 
         if self.config.enable_accel:
             print("\nAccelerometer Status:")

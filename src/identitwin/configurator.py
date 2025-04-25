@@ -119,8 +119,11 @@ class SystemConfig:
         self.enable_lvdt = enable_lvdt
         self.enable_accel = enable_accel
         self.num_lvdts = num_lvdts
+        self.lvdt_slopes = lvdt_slopes
         self.num_accelerometers = num_accelerometers
 
+
+        
         # Sampling rates - use provided values directly
         self.sampling_rate_acceleration = sampling_rate_acceleration
         self.sampling_rate_lvdt = sampling_rate_lvdt
@@ -222,7 +225,7 @@ class SystemConfig:
 
         if not self.gpio_pins or len(self.gpio_pins) < 2:
             print("Warning: GPIO pins not configured correctly. Using default pins 18 and 17.")
-            self.gpio_pins = [18, 17]
+            self.gpio_pins = [17, 18]
 
         try:
             # Ensure GPIO pins are released by manually resetting them
@@ -233,7 +236,7 @@ class SystemConfig:
             # Initialize LEDs
             status_led = LED(self.gpio_pins[0])
             activity_led = LED(self.gpio_pins[1])
-            status_led.off()
+            status_led.on()
             activity_led.off()
             print(f"LEDs initialized on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
             return status_led, activity_led

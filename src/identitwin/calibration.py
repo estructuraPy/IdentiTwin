@@ -30,22 +30,62 @@ def initialize_lvdt(channels, slopes=None, config=None):
     """
     if not channels or not isinstance(channels, list):
         raise ValueError("Invalid channels input.")
+        
+    print(f"\nInitializing {len(channels)} LVDT channels")
+    
+    # Validate that slopes are provided and match the number of channels
+    if slopes is None:
+        raise ValueError("LVDT slopes must be provided from initialization.py")
+    
+    if len(slopes) < len(channels):
+        raise ValueError(f"Not enough slopes provided. Need {len(channels)} slopes, but only got {len(slopes)}.")
+    
+    # Only use the required number of slopes
+    if len(slopes) > len(channels):
+        slopes = slopes[:len(channels)]
+    
+    print(f"Using slopes: {[f'{s:.2f}' for s in slopes]}")
 
     lvdt_systems = []
     print("\nCalibrating LVDTs...")
     for i, channel in enumerate(channels):
         try:
+            # Read initial voltage 
+            attempts = 0
+            max_attempts = 3
+            voltage = None
+            
+            while attempts < max_attempts:
+                try:
+                    voltage = channel.voltage
+                    break
+                except Exception as read_err:
+                    attempts += 1
+                    print(f"   Attempt {attempts} to read LVDT-{i+1} failed: {read_err}")
+                    time.sleep(0.1)
+            
+            if voltage is None:
+                print(f" - ERROR: Failed to read voltage from LVDT-{i+1} after {max_attempts} attempts")
+                lvdt_systems.append(None)
+                continue
+            
             slope = slopes[i]
-            voltage = channel.voltage
             intercept = -slope * voltage
             print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
             
-            # Crear diccionario con los parámetros de calibración
+            # Create dictionary with calibration parameters
             lvdt_system = {
                 'slope': slope,
-                'intercept': intercept
+                'intercept': intercept,
+                # Add these alternative names for compatibility with different code paths
+                'lvdt_slope': slope,
+                'lvdt_intercept': intercept
             }
             lvdt_systems.append(lvdt_system)
+            
+            # Test if the calibration produces reasonable values
+            test_displacement = slope * voltage + intercept
+            print(f" - LVDT-{i+1} test reading: {test_displacement:.4f}mm (should be near zero)")
             
             if config:
                 if not hasattr(config, 'lvdt_calibration'):
@@ -58,6 +98,14 @@ def initialize_lvdt(channels, slopes=None, config=None):
             # Removing default values - each sensor must be properly calibrated
             print(f"LVDT-{i+1} calibration failed. This sensor must be calibrated before use.")
             lvdt_systems.append(None)
+    
+    # Final summary after calibration
+    print("\nLVDT Calibration Summary:")
+    for i, lvdt in enumerate(lvdt_systems):
+        if lvdt:
+            print(f" - LVDT-{i+1}: Calibrated successfully")
+        else:
+            print(f" - LVDT-{i+1}: Calibration FAILED")
     
     if config:
         _save_calibration_data(config, lvdt_systems=lvdt_systems)
