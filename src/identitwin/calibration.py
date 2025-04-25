@@ -127,7 +127,6 @@ def zeroing_lvdt(channel, slope, label="LVDT"):
     intercept = -slope * voltage
     print(f" - {label} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
 
-    # Store calibration values directly in the channel object
     channel.calibration_slope = slope
     channel.calibration_intercept = intercept
 
@@ -135,7 +134,7 @@ def zeroing_lvdt(channel, slope, label="LVDT"):
 
 def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
     """
-    Calibrates multiple accelerometers to determine bias offsets and scaling factors.
+    Calibrates multiple accelerometers to determine bias offsets.
 
     Args:
         mpu_list: List of MPU objects with a 'get_accel_data()' method.
@@ -143,14 +142,13 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
         config: System configuration object for saving calibration data.
 
     Returns:
-        List of dictionaries with keys 'x', 'y', 'z', and 'scaling_factor'.
+        List of dictionaries with keys 'x', 'y', 'z'.
     """
     if not mpu_list:
         return None
     
     print("Calibrating accelerometers...", flush=True)
     offsets = []
-    GRAVITY = 9.80665
     for i, mpu in enumerate(mpu_list):
         x_samples, y_samples, z_samples = [], [], []
         end_time = time.time() + calibration_time
@@ -167,12 +165,9 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
             x_avg = np.mean(x_samples)
             y_avg = np.mean(y_samples)
             z_avg = np.mean(z_samples)
-            magnitude = np.sqrt(x_avg**2 + y_avg**2 + z_avg**2)
-            scaling_factor = GRAVITY / magnitude
-            offset = {'x': -x_avg, 'y': -y_avg, 'z': -z_avg, 'scaling_factor': scaling_factor}
+            offset = {'x': -x_avg, 'y': -y_avg, 'z': -z_avg}
             offsets.append(offset)
             label = f"Accelerometer-{i+1}"
-            print(f" - {label} scaling factor: {scaling_factor:.3f}")
             print(f" - {label} calibrated offsets: X={offset['x']:.3f}, Y={offset['y']:.3f}, Z={offset['z']:.3f}")
         else:
             # Removing default values - each sensor must be properly calibrated
@@ -185,7 +180,7 @@ def multiple_accelerometers(mpu_list, calibration_time=2.0, config=None):
 
 def calibrate_accelerometer(data, offsets):
     """
-    Calibrates accelerometer data using offsets and scaling factor.
+    Calibrates accelerometer data using offsets only.
     
     Args:
         data: Dictionary with 'x', 'y', 'z' acceleration values.
@@ -204,12 +199,12 @@ def calibrate_accelerometer(data, offsets):
     calibrated_data = data.copy()
     if not all(k in data for k in ['x', 'y', 'z']):
         raise ValueError("Missing acceleration components.")
-    if not all(k in offsets for k in ['x', 'y', 'z', 'scaling_factor']):
+    if not all(k in offsets for k in ['x', 'y', 'z']):
         raise ValueError("Missing calibration parameters.")
-    scaling_factor = offsets["scaling_factor"]
-    calibrated_data["x"] = (data["x"] + offsets["x"]) * scaling_factor
-    calibrated_data["y"] = (data["y"] + offsets["y"]) * scaling_factor
-    calibrated_data["z"] = (data["z"] + offsets["z"]) * scaling_factor
+    
+    calibrated_data["x"] = data["x"] + offsets["x"]
+    calibrated_data["y"] = data["y"] + offsets["y"]
+    calibrated_data["z"] = data["z"] + offsets["z"]
     return calibrated_data
 
 def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
@@ -235,7 +230,6 @@ def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
                 new_calibration += f"  X-offset: {offset['x']:.6f} m/s^2\n"
                 new_calibration += f"  Y-offset: {offset['y']:.6f} m/s^2\n"
                 new_calibration += f"  Z-offset: {offset['z']:.6f} m/s^2\n"
-                new_calibration += f"  Scaling factor: {offset['scaling_factor']:.6f}\n"
             new_calibration += "\n"
         if lvdt_systems:
             new_calibration += "LVDT Calibration:\n" + "-----------------\n"

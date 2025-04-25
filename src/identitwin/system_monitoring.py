@@ -741,30 +741,10 @@ class MonitoringSystem:
                 print(f"\nAcceleration Moving Average: {avg_accel:.3f}")
                 print(f"Individual trigger: {self.config.trigger_acceleration_threshold:.3f}m/s^2, Average detrigger: {detrig_accel:.3f}m/s^2")
                 
-                # Print accelerometer calibration values
-                if hasattr(self.config, 'accel_offsets') and self.config.accel_offsets:
-                    print("\nAccelerometer Calibration Values:")
-                    for i, offset in enumerate(self.config.accel_offsets):
-                        if offset is not None:
-                            print(f"  Accel{i+1}: X-offset={offset['x']:.4f}, Y-offset={offset['y']:.4f}, Z-offset={offset['z']:.4f}, Scaling={offset['scaling_factor']:.4f}")
-                        else:
-                            print(f"  Accel{i+1}: Not calibrated")
-                
             if self.config.enable_lvdt:
                 print(f"\nDisplacement Moving Average: {avg_disp:.3f}")
                 print(f"Individual trigger: {self.config.trigger_displacement_threshold:.3f}mm, Average detrigger: {detrig_disp:.3f}mm")
                 
-                # Print LVDT calibration values
-                if hasattr(self, 'lvdt_calibration') and self.lvdt_calibration:
-                    print("\nLVDT Calibration Values:")
-                    for i, calib in enumerate(self.lvdt_calibration):
-                        if calib is not None:
-                            # Get slope and intercept from different possible structures
-                            slope = calib.get('slope', calib.get('lvdt_slope', 'Unknown'))
-                            intercept = calib.get('intercept', calib.get('lvdt_intercept', 'Unknown'))
-                            print(f"  LVDT{i+1}: Slope={slope:.4f}mm/V, Intercept={intercept:.4f}mm")
-                        else:
-                            print(f"  LVDT{i+1}: Not calibrated")
 
         print("\n===============================================================================")
         print("---  Press 'Ctrl + C' to stop monitoring ---")
