@@ -90,9 +90,10 @@ Developed by:
 
 Instituto Tecnologico de Costa Rica, 2025
 
+===============================================================================
 """
     print(banner)
-    time.sleep(2)
+    time.sleep(5)
 
 
 def parse_arguments():
