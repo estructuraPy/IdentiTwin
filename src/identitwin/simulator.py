@@ -235,7 +235,8 @@ class SimulatorConfig:
         self.enable_accel = enable_accel
         self.num_lvdts = num_lvdts
         self.num_accelerometers = num_accelerometers
-        
+        self.lvdt_slopes = lvdt_slopes # Store the lvdt_slopes
+
         self.sampling_rate_acceleration = sampling_rate_acceleration
         self.sampling_rate_lvdt = sampling_rate_lvdt
         self.plot_refresh_rate = plot_refresh_rate

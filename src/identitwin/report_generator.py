@@ -71,10 +71,7 @@ def generate_summary_report(monitor_system, report_file):
     """Generate and save a summary report of the monitoring session."""
     try:
         config = monitor_system.config
-        
-        # Force a final update of performance stats before generating report
-        monitor_system._update_performance_stats()
-        
+
         with open(report_file, 'w') as f:
             f.write("==== IdentiTwin MONITORING SUMMARY ====\n")
             f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")

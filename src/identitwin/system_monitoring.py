@@ -133,42 +133,32 @@ class MonitoringSystem:
                 print("\nSetting up LVDTs...")
                 self.ads = self.config.create_ads1115()
                 if self.ads:
-                    self.lvdt_channels = self.config.create_lvdt_channels(self.ads)
+                    self.lvdt_channels = self.config.create_lvdt_channels(self.ads) # Creates channels
                     if self.lvdt_channels:
-                        print(f"LVDT channels initialized successfully.")
-                        # Calibrate LVDTs
-                        
-                        # Get slopes from configuration without any default fallbacks
-                        lvdt_slopes = getattr(self.config, 'lvdt_slopes', None)
-                        
-                        # Error out if slopes are not provided - no defaults allowed
-                        if lvdt_slopes is None:
-                            raise ValueError("LVDT slopes must be provided in configuration from initialization.py")
-                            
-                        # Error out if not enough slopes are provided - no defaults allowed
-                        if len(lvdt_slopes) < len(self.lvdt_channels):
-                            raise ValueError(f"Not enough LVDT slopes provided in configuration. Need {len(self.lvdt_channels)} slopes, but only got {len(lvdt_slopes)}.")
-                        
-                        # Trim slopes if more provided than needed (this is still allowed)
-                        if len(lvdt_slopes) > len(self.lvdt_channels):
-                            lvdt_slopes = lvdt_slopes[:len(self.lvdt_channels)]
-                            print(f"Note: More slopes provided ({len(self.config.lvdt_slopes)}) than LVDT channels ({len(self.lvdt_channels)}). Using only the first {len(self.lvdt_channels)}.")
-                        
-                        # Initialize LVDTs with the explicitly provided slopes only
-                        try:
-                            self.lvdt_calibration = calibration.initialize_lvdt(
-                                channels=self.lvdt_channels,
-                                slopes=lvdt_slopes,
-                                config=self.config
-                            )
-                            print("LVDT calibration complete.")
-                        except ValueError as e:
-                            print(f"Error during LVDT calibration: {e}")
-                            raise
+                        # === Add check for lvdt_slopes here ===
+                        if not self.config.lvdt_slopes or len(self.config.lvdt_slopes) < len(self.lvdt_channels):
+                            print(f"ERROR: LVDT slopes are missing or insufficient in the configuration.")
+                            print(f"  Expected {len(self.lvdt_channels)} slopes, found: {self.config.lvdt_slopes}")
+                            raise ValueError("LVDT slopes missing or insufficient in configuration.")
+                        # =======================================
+
+                        # Call calibration AFTER channels are created and slopes are verified
+                        self.lvdt_calibration = calibration.initialize_lvdt( # Calls calibration
+                            self.lvdt_channels,
+                            self.config.lvdt_slopes, # Pass verified slopes
+                            self.config
+                        )
+                        # Check if calibration failed for any sensor
+                        if any(cal is None for cal in self.lvdt_calibration):
+                             print("Warning: One or more LVDT calibrations failed. Check logs.")
+                             # Decide how to handle: maybe disable LVDT? or just warn?
+                             # For now, just warn. Data processing needs to handle None calibration.
+                        else:
+                             print("LVDT channels initialized and calibrated successfully.")
                     else:
-                        print("Failed to initialize LVDT channels.")
+                        print("LVDT channel creation failed.")
                 else:
-                    print("Failed to create ADS1115 object.")
+                    print("ADS1115 initialization failed, cannot set up LVDTs.")
             else:
                 print("LVDT setup skipped (disabled in configuration).")
 

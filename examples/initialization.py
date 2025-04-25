@@ -17,6 +17,7 @@ from datetime import datetime
 import numpy as np
 import matplotlib
 import importlib  # Add importlib to dynamically load modules
+from collections import deque  # Add deque import
 
 # Suppress warnings related to hardware detection
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -113,14 +114,14 @@ def parse_arguments():
     sensor_group.add_argument('--accel', action='store_true', help='Enable accelerometer measurements')
     sensor_group.add_argument('--no-accel', action='store_true', help='Disable accelerometer measurements')
 
-    # Visualization configuration
-    visual_group = parser.add_argument_group('Visualization Configuration')
-    visual_group.add_argument('--plot-displacement', action='store_true', help='Enable LVDT displacement plots')
-    visual_group.add_argument('--no-plot-displacement', action='store_true', help='Disable LVDT displacement plots')
-    visual_group.add_argument('--accel-plots', action='store_true', help='Enable acceleration plots')
-    visual_group.add_argument('--no-accel-plots', action='store_true', help='Disable acceleration plots')
-    visual_group.add_argument('--fft-plots', action='store_true', help='Enable FFT plots')
-    visual_group.add_argument('--no-fft-plots', action='store_true', help='Disable FFT plots')
+    # Visualization configuration (Arguments kept for potential future use, but functionality disabled)
+    visual_group = parser.add_argument_group('Visualization Configuration (Currently Disabled)')
+    visual_group.add_argument('--plot-displacement', action='store_true', help='Enable LVDT displacement plots (Disabled)')
+    visual_group.add_argument('--no-plot-displacement', action='store_true', help='Disable LVDT displacement plots (Disabled)')
+    visual_group.add_argument('--accel-plots', action='store_true', help='Enable acceleration plots (Disabled)')
+    visual_group.add_argument('--no-accel-plots', action='store_true', help='Disable acceleration plots (Disabled)')
+    visual_group.add_argument('--fft-plots', action='store_true', help='Enable FFT plots (Disabled)')
+    visual_group.add_argument('--no-fft-plots', action='store_true', help='Disable FFT plots (Disabled)')
 
     # Sampling rate configuration
     rate_group = parser.add_argument_group('Sampling Rate Configuration')
@@ -129,15 +130,16 @@ def parse_arguments():
     rate_group.add_argument('--lvdt-rate', type=float,
                             help=f'LVDT sampling rate in Hz (default: {LVDT_SAMPLING_RATE} Hz)')
     rate_group.add_argument('--plot-rate', type=float,
-                            help=f'Plot refresh rate in Hz (default: {PLOT_REFRESH_RATE} Hz)')
+                            help=f'Plot refresh rate in Hz (default: {PLOT_REFRESH_RATE} Hz, Disabled)')
 
     # System configuration
     system_group = parser.add_argument_group('System Configuration')
-    system_group.add_argument('--output-dir', type=str, help='Custom output directory')
-    system_group.add_argument('--config', type=str, help='Path to configuration file')
+    system_group.add_argument('--output-dir', type=str, help='Custom output directory for data, logs, and reports')
+    # config file argument removed as it's not currently used
+    # system_group.add_argument('--config', type=str, help='Path to configuration file')
 
     # Add simulation mode
-    parser.add_argument('--simulation', action='store_true', help='Run in simulation mode (simulated sensors)')
+    parser.add_argument('--simulation', action='store_true', help='Run in simulation mode (simulated sensors), automatically enabled if not on Raspberry Pi')
 
     return parser.parse_args()
 
@@ -164,7 +166,7 @@ def apply_cli_args(args):
     if args.no_accel:
         enable_accel = False
 
-    # Override visualization settings
+    # Override visualization settings (currently disabled, but keep logic)
     if args.plot_displacement:
         enable_plot_displacement = True
     if args.no_plot_displacement:
@@ -178,76 +180,73 @@ def apply_cli_args(args):
     if args.no_fft_plots:
         enable_fft_plots = False
 
-    # Ensure plot settings are consistent with sensor availability
+    # Ensure plot settings are consistent with sensor availability (even if disabled)
     if not enable_lvdt:
         enable_plot_displacement = False
     if not enable_accel:
         enable_accel_plots = False
-        enable_fft_plots = False
+        enable_fft_plots = False # FFT depends on accel data
 
     # Override sampling rates with validation
     if args.accel_rate is not None:
         if args.accel_rate > 0:
             ACCEL_SAMPLING_RATE = args.accel_rate
         else:
-            print(f"Warning: Invalid accelerometer sampling rate ({args.accel_rate}). Using default: {ACCEL_SAMPLING_RATE} Hz")
-
+            print("Warning: Invalid accelerometer rate provided. Using default.")
     if args.lvdt_rate is not None:
         if args.lvdt_rate > 0:
             LVDT_SAMPLING_RATE = args.lvdt_rate
         else:
-            print(f"Warning: Invalid LVDT sampling rate ({args.lvdt_rate}). Using default: {LVDT_SAMPLING_RATE} Hz")
-
+            print("Warning: Invalid LVDT rate provided. Using default.")
     if args.plot_rate is not None:
         if args.plot_rate > 0:
             PLOT_REFRESH_RATE = args.plot_rate
         else:
-            print(f"Warning: Invalid plot refresh rate ({args.plot_rate}). Using default: {PLOT_REFRESH_RATE} Hz")
+            print("Warning: Invalid plot rate provided. Using default.")
 
 
 def get_operation_mode_name():
-    """Return a descriptive name for the current operation mode.
-
-    Args:
-        None
-
-    Returns:
-        str: Operation mode name.
-    """
+    """Return a descriptive name for the current operation mode."""
     if enable_lvdt and enable_accel:
-        return "Combined Mode (LVDT + Accelerometers)"
+        return "LVDT + Accelerometer"
     elif enable_lvdt:
-        return "LVDT-Only Mode"
+        return "LVDT Only"
     elif enable_accel:
-        return "Accelerometer-Only Mode"
+        return "Accelerometer Only"
     else:
-        return "No Sensors Mode (Invalid)"
+        return "No Sensors Enabled"
 
 
-def create_system_config():
-    """Create a SystemConfig object with current settings.
+def create_system_config(args):
+    """Create the system configuration object based on mode and arguments."""
+    global enable_lvdt, enable_accel, enable_plots, enable_plot_displacement, enable_accel_plots, enable_fft_plots
+    global SimulatorConfig # Make sure SimulatorConfig is accessible if imported
 
-    Args:
-        None
+    # Determine if running in simulation mode
+    simulation_mode = args.simulation or not IS_RASPBERRY_PI
 
-    Returns:
-        configurator.SystemConfig: System configuration object.
-    """
-    
+    # Choose the correct configuration class
+    # Ensure SimulatorConfig is loaded if needed (handled in main)
+    if simulation_mode and SimulatorConfig is None:
+         # This case should ideally not happen if main logic is correct, but added as safeguard
+         raise RuntimeError("SimulatorConfig not loaded despite simulation mode being active.")
+    ConfigClass = SimulatorConfig if simulation_mode else configurator.SystemConfig
+
+    # Prepare GPIO pins list
     gpio_pins_list = [STATUS_PIN, ACTIVITY_PIN]
 
-    from identitwin.configurator import SystemConfig
-    config = SystemConfig(
+    # Create the configuration object using global constants and CLI args
+    config = ConfigClass(
         enable_lvdt=enable_lvdt,
         enable_accel=enable_accel,
-        sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
-        sampling_rate_lvdt=LVDT_SAMPLING_RATE,
-        plot_refresh_rate=PLOT_REFRESH_RATE,
-        gpio_pins=gpio_pins_list,
-        output_dir=None,
+        output_dir=args.output_dir, # Use output_dir from args
         num_lvdts=NUM_LVDTS,
         num_accelerometers=NUM_ACCELS,
-        lvdt_slopes=LVDT_SLOPES,
+        lvdt_slopes=LVDT_SLOPES, # Ensure LVDT_SLOPES is passed here
+        sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
+        sampling_rate_lvdt=LVDT_SAMPLING_RATE,
+        plot_refresh_rate=PLOT_REFRESH_RATE, # Plot rate kept for consistency
+        gpio_pins=gpio_pins_list,
         trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
         detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
         trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
@@ -255,155 +254,121 @@ def create_system_config():
         pre_event_time=PRE_EVENT_TIME,
         post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION,
-        )
-    
-    # Configure LVDT pins explicitly
-    try:
-        import adafruit_ads1x15.ads1115 as ADS
+        verbose=simulation_mode # Enable verbosity in simulation mode by default
+    )
 
-        config.lvdt_pin_config = [ADS.P0, ADS.P1]
-        print(f"LVDT pins configured: {[0, 1]}")
-    except ImportError:
-        print("Warning: Could not import ADS1115 for pin configuration - using defaults")
-    
+    # Store operational mode and plot settings in config
+    config.operational_mode = get_operation_mode_name()
+    config.enable_plots = False # Force False
+    config.enable_plot_displacement = False # Force False
+    config.enable_accel_plots = False # Force False
+    config.enable_fft_plots = False # Force False
+
+    # Store expected rates for reporting
+    config.expected_sampling_rate_acceleration = ACCEL_SAMPLING_RATE
+    config.expected_sampling_rate_lvdt = LVDT_SAMPLING_RATE
+
     return config
 
 
 def main():
     """Main function to initialize and run the monitoring system."""
     print_banner()
-
     args = parse_arguments()
-    apply_cli_args(args)
+    apply_cli_args(args) # Apply CLI args to modify global constants
 
+    # --- Simulation Mode Handling ---
+    simulation_mode = args.simulation or not IS_RASPBERRY_PI
+    global SimulatorConfig # Needed to assign the class
+    SimulatorConfig = None # Initialize to None
+    if simulation_mode:
+        if not IS_RASPBERRY_PI and not args.simulation:
+             print("Non-Raspberry Pi platform detected. Automatically enabling simulation mode.")
+        try:
+            simulator_module = importlib.import_module('identitwin.simulator')
+            SimulatorConfig = simulator_module.SimulatorConfig
+            print("Simulator configuration module loaded.")
+        except ImportError as e:
+            print(f"FATAL: Error importing simulator module: {e}")
+            sys.exit(1) # Exit if simulator cannot be loaded when needed
+    else:
+         print("Hardware mode enabled (Raspberry Pi detected or --simulation not used).")
+
+
+    # --- Configuration ---
     if not enable_lvdt and not enable_accel:
-        print("At least one sensor type (LVDT or accelerometer) must be enabled.")
+        print("ERROR: At least one sensor type (LVDT or accelerometer) must be enabled.")
         sys.exit(1)
 
-    # Disable plotting features as visualization module is removed
-    global enable_plots, enable_plot_displacement, enable_accel_plots, enable_fft_plots
-    enable_plots = False
-    enable_plot_displacement = False
-    enable_accel_plots = False
-    enable_fft_plots = False
-
-    # Auto-detect simulation mode if not on Raspberry Pi
-    simulation_mode = args.simulation or not IS_RASPBERRY_PI
-    if not IS_RASPBERRY_PI and not args.simulation:
-        print("Non-Raspberry Pi platform detected. Automatically enabling simulation mode.")
-    
-    # Dynamically load the appropriate configuration module
-    config_module_name = "identitwin.simulator" if simulation_mode else "identitwin.configurator"
-    config_module = importlib.import_module(config_module_name)
-    SystemConfig = config_module.SimulatorConfig if simulation_mode else config_module.SystemConfig
+    # Create the single, definitive config object
+    config = create_system_config(args)
 
     print("\n======================== Identitwin Monitoring System =========================\n")
     print(f"Operation Mode: {'Simulation' if simulation_mode else 'Hardware'}")
+    print(f"Sensor Mode: {config.operational_mode}")
+    print("\nConfiguration Summary:")
+    print(f"  LVDT Enabled: {config.enable_lvdt} ({config.num_lvdts} channels)")
+    print(f"  Accelerometer Enabled: {config.enable_accel} ({config.num_accelerometers} channels)")
+    print(f"  LVDT Rate (Expected): {config.expected_sampling_rate_lvdt} Hz")
+    print(f"  Accel Rate (Expected): {config.expected_sampling_rate_acceleration} Hz")
+    print(f"  Output Directory: {config.output_dir}")
+    # Add other relevant config details if needed
 
-    config = SystemConfig(
-        enable_lvdt=enable_lvdt,
-        enable_accel=enable_accel,
-        sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
-        sampling_rate_lvdt=LVDT_SAMPLING_RATE,
-        plot_refresh_rate=PLOT_REFRESH_RATE,
-        output_dir=args.output_dir,
-        num_lvdts=NUM_LVDTS,
-        num_accelerometers=NUM_ACCELS,
-        gpio_pins=None,
-        trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
-        detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
-        trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
-        detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
-        pre_event_time=PRE_EVENT_TIME,
-        post_event_time=POST_EVENT_TIME,
-        min_event_duration=MIN_EVENT_DURATION,
-        lvdt_slopes=LVDT_SLOPES
-    )
-    
-    # Assign LVDT slopes as an attribute after creating the config object
-    config.lvdt_slopes = LVDT_SLOPES
-    print(f"LVDT slopes configured: {LVDT_SLOPES}")
-    
-    # keep originals for printouts
-    config.expected_sampling_rate_acceleration = config.sampling_rate_acceleration
-    config.expected_sampling_rate_lvdt        = config.sampling_rate_lvdt
-
-    print(f"Operation: {get_operation_mode_name()}")
-    print("\nSensor Configuration:")
-    print(f"  - LVDT Enabled: {enable_lvdt}")
-    print(f"  - Accelerometer Enabled: {enable_accel}")
-    print("\nVisualization Configuration:")
-    print(f"  - LVDT Displacement Plots: {enable_plot_displacement}")
-    print(f"  - Acceleration Plots: {enable_accel_plots}")
-    print(f"  - FFT Plots: {enable_fft_plots}")
-    print("\nSampling Rates:")
-    print(f"  - Accelerometer Rate: {ACCEL_SAMPLING_RATE} Hz")
-    print(f"  - LVDT Rate: {LVDT_SAMPLING_RATE} Hz")
-    print(f"  - Plot Refresh Rate: {PLOT_REFRESH_RATE} Hz")
-    print("\nEvent Detection Parameters:")
-    print(f"  - Acceleration Trigger Threshold: {ACCEL_TRIGGER_THRESHOLD} m/s2")
-    print(f"  - Displacement Trigger Threshold: {DISPLACEMENT_TRIGGER_THRESHOLD} mm")
-    print(f"  - Pre-Trigger Buffer: {PRE_EVENT_TIME} seconds")
-    print(f"  - Post-Trigger Buffer: {POST_EVENT_TIME} seconds")
-    print(f"  - Minimum Event Duration: {MIN_EVENT_DURATION} seconds")
-
-    if args.output_dir:
-        config.output_dir = args.output_dir
-        config.events_dir = os.path.join(config.output_dir, "events")
-        config.logs_dir = os.path.join(config.output_dir, "logs")
-        config.reports_dir = os.path.join(config.output_dir, "reports")
-        os.makedirs(config.events_dir, exist_ok=True)
-        os.makedirs(config.logs_dir, exist_ok=True)
-        os.makedirs(config.reports_dir, exist_ok=True)
-
-    config.operational_mode = get_operation_mode_name()
-    config.enable_plots = enable_plots  # Now always False
-
+    # --- System Initialization ---
     monitor_system = MonitoringSystem(config)
-    monitor_system.plot_queue = None
 
     try:
-        monitor_system.setup_sensors()
-
-        print("\n================== Init data processing =====================\n")
-        config.window_duration = 10.0  # seconds of data visible
-        monitor_system.initialize_processing()
-
-        system_report_file = os.path.join(config.reports_dir, "system_report.txt")
+        # Generate initial system report before setup
+        system_report_file = os.path.join(config.reports_dir, f"system_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         report_generator.generate_system_report(config, system_report_file)
 
+        # Setup sensors (includes calibration) and processing
+        monitor_system.setup_sensors()
+        monitor_system.initialize_processing()
+
+        # --- Monitoring ---
+        print("\n======================== Starting Monitoring ========================\n")
         monitor_system.start_monitoring()
-
-        while monitor_system.running:
-            if monitor_system.status_led:
-                try:
-                    monitor_system.status_led.blink(on_time=0.1, off_time=0.1, n=1, background=True)
-                except Exception as led_err:
-                    print(f"Warning: Status LED blink failed: {led_err}", file=sys.stderr)
-                    monitor_system.status_led = None
-            time.sleep(0.5)
-
-        if hasattr(monitor_system, "acquisition_thread") and monitor_system.acquisition_thread.is_alive():
-            monitor_system.acquisition_thread.join(timeout=1.0)
-        if hasattr(monitor_system, "event_thread") and monitor_system.event_thread.is_alive():
-            monitor_system.event_thread.join(timeout=1.0)
-
-        summary_report_file = os.path.join(config.reports_dir, "summary_report.txt")
-        report_generator.generate_summary_report(monitor_system, summary_report_file)
+        monitor_system.wait_for_completion() # Blocks until stopped (e.g., by Ctrl+C)
 
     except KeyboardInterrupt:
-        print("\nProgram stopped by user")
-        if 'monitor_system' in locals() and monitor_system.running:
-            monitor_system.stop_monitoring()
+        print("\nProgram stopped by user (KeyboardInterrupt).")
+        # stop_monitoring is called within wait_for_completion's exception handler
+
     except Exception as e:
-        print(f"\nError in monitoring system: {e}")
+        print(f"\nFATAL ERROR during monitoring: {e}")
         traceback.print_exc()
+        # Attempt graceful shutdown if possible
+        if 'monitor_system' in locals() and monitor_system.running:
+            try:
+                monitor_system.stop_monitoring()
+            except Exception as stop_err:
+                 print(f"Error during forced stop: {stop_err}")
+
     finally:
-        print("\nCleaning up...")
+        # --- Cleanup and Final Report ---
+        print("\n======================== Shutting Down ========================\n")
         if 'monitor_system' in locals():
+            # Generate final summary report
+            print("Generating final summary report...")
+            summary_report_file = os.path.join(config.reports_dir, f"summary_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+            # Ensure performance stats are updated before generating the report
+            if hasattr(monitor_system, '_update_performance_stats'):
+                 try:
+                     # Pass the deques required by the method
+                     monitor_system._update_performance_stats(
+                         monitor_system.performance_stats.get('accel_periods', deque()),
+                         monitor_system.performance_stats.get('lvdt_periods', deque())
+                     )
+                 except Exception as perf_update_err:
+                      print(f"Warning: Could not update performance stats for final report: {perf_update_err}")
+
+            report_generator.generate_summary_report(monitor_system, summary_report_file)
+
+            # Cleanup resources
             monitor_system.cleanup()
-        print("Done!")
+        print("\nIdentitwin monitoring system shut down.")
 
 
 if __name__ == "__main__":
-    main()
+    main() # Call the refactored main function
