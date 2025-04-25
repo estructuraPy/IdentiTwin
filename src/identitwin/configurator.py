@@ -87,6 +87,10 @@ class SystemConfig:
         pre_event_time=5.0, 
         post_event_time=15.0,
         min_event_duration=2.0,
+        enable_plots=True,
+        enable_plot_displacement=True,
+        enable_accel_plots=True,
+        enable_fft_plots=True,
     ):
         """Initialize system configuration."""
         # Set output directory first to avoid the AttributeError
@@ -169,6 +173,12 @@ class SystemConfig:
 
         # LED configuration - default GPIO pins; can be modified from initialization or simulation
         self.gpio_pins = gpio_pins if gpio_pins is not None else [18, 17]
+
+        # Store visualization settings
+        self.enable_plots = enable_plots
+        self.enable_plot_displacement = enable_plot_displacement
+        self.enable_accel_plots = enable_accel_plots
+        self.enable_fft_plots = enable_fft_plots
 
         # Validate rates and print warnings if needed
         if self.sampling_rate_acceleration != sampling_rate_acceleration:

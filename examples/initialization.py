@@ -71,10 +71,10 @@ ACTIVITY_PIN = 18
 enable_lvdt = True
 enable_accel = True
 
-enable_plots = False  # Forced to False: visualization module removed
-enable_plot_displacement = False  # Forced to False: visualization module removed
-enable_accel_plots = False  # Forced to False: visualization module removed
-enable_fft_plots = False  # Forced to False: visualization module removed
+enable_plots = True
+enable_plot_displacement = True
+enable_accel_plots = False
+enable_fft_plots = False
 
 
 def print_banner():
@@ -269,7 +269,6 @@ def create_system_config():
     
     return config
 
-
 def main():
     """Main function to initialize and run the monitoring system."""
     print_banner()
@@ -280,13 +279,6 @@ def main():
     if not enable_lvdt and not enable_accel:
         print("At least one sensor type (LVDT or accelerometer) must be enabled.")
         sys.exit(1)
-
-    # Disable plotting features as visualization module is removed
-    global enable_plots, enable_plot_displacement, enable_accel_plots, enable_fft_plots
-    enable_plots = False
-    enable_plot_displacement = False
-    enable_accel_plots = False
-    enable_fft_plots = False
 
     # Auto-detect simulation mode if not on Raspberry Pi
     simulation_mode = args.simulation or not IS_RASPBERRY_PI
@@ -318,7 +310,11 @@ def main():
         pre_event_time=PRE_EVENT_TIME,
         post_event_time=POST_EVENT_TIME,
         min_event_duration=MIN_EVENT_DURATION,
-        lvdt_slopes=LVDT_SLOPES
+        lvdt_slopes=LVDT_SLOPES,
+        enable_plots=enable_plots,
+        enable_plot_displacement=enable_plot_displacement,
+        enable_accel_plots=enable_accel_plots,
+        enable_fft_plots=enable_fft_plots
     )
     
     # Assign LVDT slopes as an attribute after creating the config object
@@ -358,13 +354,17 @@ def main():
         os.makedirs(config.reports_dir, exist_ok=True)
 
     config.operational_mode = get_operation_mode_name()
-    config.enable_plots = enable_plots  # Now always False
 
     monitor_system = MonitoringSystem(config)
     monitor_system.plot_queue = None
 
     try:
         monitor_system.setup_sensors()
+
+        # Add visualization if enabled
+        if config.enable_lvdt:
+            from identitwin.visualization import run_dashboard
+            dashboard_thread = run_dashboard(monitor_system)
 
         print("\n================== Init data processing =====================\n")
         config.window_duration = 10.0  # seconds of data visible

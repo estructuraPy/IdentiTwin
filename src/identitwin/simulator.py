@@ -214,8 +214,16 @@ class SimulatorConfig:
         post_event_time=15.0,
         min_event_duration=2.0,
         verbose=False,  # Add verbosity flag
+        enable_plots=True,
+        enable_plot_displacement=True,
+        enable_accel_plots=True,
+        enable_fft_plots=True,
     ):
         self.verbose = verbose  # Store verbosity setting
+        self.enable_plots = enable_plots
+        self.enable_plot_displacement = enable_plot_displacement
+        self.enable_accel_plots = enable_accel_plots
+        self.enable_fft_plots = enable_fft_plots
         # Directory and file configuration
         self.output_dir = output_dir or os.path.join("repository", datetime.now().strftime("%Y%m%d"))
         os.makedirs(self.output_dir, exist_ok=True)
