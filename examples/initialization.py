@@ -49,6 +49,7 @@ from identitwin.calibration import calibrate_lvdt_channels
 ACCEL_SAMPLING_RATE = 100.0  # Hz
 LVDT_SAMPLING_RATE = 5.0  # Hz
 PLOT_REFRESH_RATE = 10.0  # Hz
+WINDOW_DURATION = 10.0  # seconds for relative time window in plots
 
 NUM_LVDTS = 2
 NUM_ACCELS = 2
@@ -336,7 +337,7 @@ def main():
     print("\nSampling Rates:")
     print(f"  - Accelerometer Rate: {ACCEL_SAMPLING_RATE} Hz")
     print(f"  - LVDT Rate: {LVDT_SAMPLING_RATE} Hz")
-    print(f"  - Plot Refresh Rate: {PLOT_REFRESH_RATE} Hz")
+    print(f"  - Plot Refresh Rate: {PLOT_REFRESH_RATE} Hz, Plot Window: {WINDOW_DURATION} s")
     print("\nEvent Detection Parameters:")
     print(f"  - Acceleration Trigger Threshold: {ACCEL_TRIGGER_THRESHOLD} m/s2")
     print(f"  - Displacement Trigger Threshold: {DISPLACEMENT_TRIGGER_THRESHOLD} mm")
@@ -367,7 +368,7 @@ def main():
             dashboard_thread = run_dashboard(monitor_system)
 
         print("\n================== Init data processing =====================\n")
-        config.window_duration = 10.0  # seconds of data visible
+        config.window_duration = WINDOW_DURATION  # seconds of data visible
         monitor_system.initialize_processing()
 
         system_report_file = os.path.join(config.reports_dir, "system_report.txt")
