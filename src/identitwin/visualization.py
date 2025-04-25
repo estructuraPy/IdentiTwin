@@ -13,6 +13,11 @@ import plotly.io as pio
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
 
+# Store historical LVDT data for scatter plots
+LVDT_HISTORY = {}          # key: sensor idx → {'x':[], 'y':[]}
+MAX_POINTS = 10000           # max samples in window
+DT = 0.2                   # seconds per update (interval ms/1000)
+
 def create_dashboard(system_monitor):
     """Create and configure the Dash application."""
     app = dash.Dash(__name__)
@@ -51,41 +56,40 @@ def create_dashboard(system_monitor):
         for i, lvdt in enumerate(lvdt_data):
             displacement = lvdt.get('displacement', 0)
             
-            # Add bar/gauge for each LVDT
-            fig.add_trace(go.Indicator(
-                mode="number+gauge",
-                value=displacement,
-                domain={'x': [i/len(lvdt_data), (i+1)/len(lvdt_data)]},
-                title={'text': f'LVDT {i+1}'},
-                gauge={
-                    'axis': {'range': [-50, 50]},
-                    'bar': {'color': '#2196F3'},
-                    'threshold': {
-                        'line': {'color': 'red', 'width': 4},
-                        'thickness': 0.75,
-                        'value': system_monitor.config.trigger_displacement_threshold
-                    },
-                    'steps': [
-                        {'range': [-system_monitor.config.trigger_displacement_threshold, 
-                                  system_monitor.config.trigger_displacement_threshold], 
-                         'color': 'rgba(255, 255, 255, 0.1)'},
-                        {'range': [-system_monitor.config.detrigger_displacement_threshold, 
-                                  system_monitor.config.detrigger_displacement_threshold], 
-                         'color': 'rgba(255, 255, 255, 0.2)'}
-                    ],
-                }
-            ))
+            # accumulate history
+            hist = LVDT_HISTORY.setdefault(i, {'x': [], 'y': []})
+            t = hist['x'][-1] + DT if hist['x'] else 0.0
+            hist['x'].append(t)
+            hist['y'].append(displacement)
+            # trim to fixed window
+            hist['x'] = hist['x'][-MAX_POINTS:]
+            hist['y'] = hist['y'][-MAX_POINTS:]
             
-        # Update layout
+            # scatter line
+            fig.add_trace(go.Scatter(
+                x=hist['x'], y=hist['y'],
+                mode='lines',
+                line={'color': '#2196F3'},
+                name=f'LVDT {i+1}'
+            ))
+        
+        # define x‑range
+        if LVDT_HISTORY:
+            xvals = next(iter(LVDT_HISTORY.values()))['x']
+            xr = [xvals[0], xvals[-1]]
+        else:
+            xr = [0, DT*MAX_POINTS]
+        
         fig.update_layout(
+            xaxis={'title':'Time (s)', 'range': xr},
+            yaxis={'title':'Displacement', 'range': [-50, 50]},
             height=400,
             margin=dict(l=40, r=40, t=60, b=40),
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
             font={'color': '#90CAF9'},
-            showlegend=False
+            showlegend=True
         )
-            
         return fig
 
     return app
