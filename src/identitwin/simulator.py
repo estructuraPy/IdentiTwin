@@ -7,6 +7,10 @@ import math
 import numpy as np
 import random  # Add this import
 import warnings  # For suppressing warnings
+import colorama # Import colorama
+
+# Initialize colorama
+colorama.init(autoreset=True) # autoreset=True automatically adds Fore.RESET after each print
 
 # Suppress any hardware-related warnings in simulation mode
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -15,50 +19,81 @@ warnings.filterwarnings("ignore", message=".*Adafruit-PlatformDetect.*")
 
 # Dummy classes to simulate hardware
 class DummyLED:
-    def __init__(self, verbose=False):  # Default verbosity to False
-        self.verbose = verbose  # Control whether messages are printed
-        self.state = False  # Track LED state: False = off, True = on
+    # Use colorama constants
+    GREEN = colorama.Fore.GREEN
+    BLUE = colorama.Fore.BLUE
+    RESET = colorama.Style.RESET_ALL # Use Style.RESET_ALL
+
+    def __init__(self, pin_number, verbose=True): # Default verbosity to True for simulation feedback
+        self.pin_number = pin_number # Store the pin number
+        self.verbose = verbose
+        self.state = False # Track LED state: False = off, True = on
+        # Determine color based on pin number (assuming pin 17=Status, 18=Activity)
+        if self.pin_number == 17: # Status LED
+            self.color = self.GREEN
+            self.name = "Status"
+        elif self.pin_number == 18: # Activity LED
+            self.color = self.BLUE
+            self.name = "Activity"
+        else: # Default/Unknown LED
+            self.color = "" # No specific color for unknown
+            self.name = f"Unknown (Pin {self.pin_number})"
+        # Add a print here to confirm verbose state during init
+        if self.verbose:
+            print(f"{self.color}SIMULATOR_INIT: {self.name} LED (Pin {self.pin_number}) initialized with verbose=True")
+        else:
+             print(f"SIMULATOR_INIT: {self.name} LED (Pin {self.pin_number}) initialized with verbose=False")
+
+
+    @property
+    def is_lit(self):
+        """Return the current state of the LED (True if ON, False if OFF)."""
+        return self.state
 
     def on(self):
         """Turn on the LED."""
-        self.state = True
-        if self.verbose:
-            print("DummyLED on")
-    
+        # Simplified print - only if verbose and state changes
+        if self.verbose and not self.state:
+            self.state = True
+            print(f"{self.color}SIMULATOR: {self.name} LED (Pin {self.pin_number}) ON")
+        elif not self.verbose and not self.state:
+             self.state = True # Still change state even if not verbose
+
     def off(self):
         """Turn off the LED."""
-        self.state = False
-        if self.verbose:
-            print("DummyLED off")
+        # Simplified print - only if verbose and state changes
+        if self.verbose and self.state:
+            self.state = False
+            print(f"{self.color}SIMULATOR: {self.name} LED (Pin {self.pin_number}) OFF")
+        elif not self.verbose and self.state:
+             self.state = False # Still change state even if not verbose
 
     def toggle(self):
         """Toggle the LED state."""
-        self.state = not self.state
-        if self.verbose:
-            print(f"DummyLED toggled to {'on' if self.state else 'off'}")
+        if self.state:
+            self.off()
+        else:
+            self.on()
+        # Removed redundant print from here as on/off handle it
 
     def blink(self, on_time=1, off_time=1, n=1, background=False):
         """
         Simulate LED blinking.
-        
-        Args:
-            on_time: Time in seconds the LED is on for each blink
-            off_time: Time in seconds the LED is off for each blink
-            n: Number of blinks
-            background: Whether to blink in the background
         """
         if self.verbose:
-            print(f"DummyLED blink: on_time={on_time}, off_time={off_time}, n={n}, background={background}")
-        
-        # For background blinking, just return immediately
+            print(f"{self.color}SIMULATOR: {self.name} LED (Pin {self.pin_number}) blink called (background={background})")
+        # Blinking logic remains the same, on/off methods will print messages
         if not background:
-            # Only for non-background blinking: toggle the LED state n times
+            initial_state = self.state
             for _ in range(n):
                 self.on()
                 time.sleep(on_time)
                 self.off()
-                if _ < n - 1:  # Don't sleep after the last blink
+                if _ < n - 1:
                     time.sleep(off_time)
+            # Restore initial state if it was ON before blinking started
+            if initial_state:
+                 self.on()
 
 class DummyADS:
     def __init__(self):
@@ -249,8 +284,17 @@ class SimulatorConfig:
         }
 
     def initialize_leds(self):
-        """Return dummy LED objects."""
-        return DummyLED(), DummyLED()
+        """Return dummy LED objects with pin numbers."""
+        print(f"DEBUG: SimulatorConfig.initialize_leds called with self.verbose={self.verbose}") # Add this check
+        # Use default pins if not provided, assuming 17=Status, 18=Activity
+        status_pin = self.gpio_pins[0] if self.gpio_pins and len(self.gpio_pins) > 0 and self.gpio_pins[0] is not None else 17
+        activity_pin = self.gpio_pins[1] if self.gpio_pins and len(self.gpio_pins) > 1 and self.gpio_pins[1] is not None else 18
+        # Pass self.verbose explicitly
+        status_led = DummyLED(pin_number=status_pin, verbose=self.verbose)
+        activity_led = DummyLED(pin_number=activity_pin, verbose=self.verbose)
+        status_led.off() # Ensure they start off
+        activity_led.off() # Ensure they start off
+        return status_led, activity_led
 
     def create_ads1115(self):
         """Return a dummy ADS instance."""
@@ -279,13 +323,9 @@ class SimulatorConfig:
 
 
 # Simulated utilities (similar to configurator, but dummy)
-def leds(gpio_pins):
-    return DummyLED(), DummyLED()
+# Removed leds() function
 
-def ads1115():
-    dummy = DummyADS()
-    dummy.gain = 2.0 / 3.0
-    return dummy
+# Removed ads1115() function
 
 def thresholds(trigger_acceleration, trigger_displacement, pre_time, enable_accel, enable_lvdt):
     return {

@@ -116,10 +116,18 @@ class MonitoringSystem:
 
     def setup_sensors(self):
         """
-        Initializes and configures the sensors (LVDTs and accelerometers).
+        Initializes and configures the sensors (LVDTs and accelerometers) and LEDs.
         """
         print("\n========================= Setting up sensors =========================\n")
         try:
+            # Initialize LEDs first
+            print("\nSetting up LEDs...")
+            self.status_led, self.activity_led = self.config.initialize_leds()
+            if self.status_led and self.activity_led:
+                print("LEDs initialized.")
+            else:
+                print("LED initialization failed or returned None.")
+
             # Initialize LVDT-related components
             if self.config.enable_lvdt:
                 print("\nSetting up LVDTs...")

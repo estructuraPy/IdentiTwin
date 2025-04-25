@@ -64,6 +64,9 @@ PRE_EVENT_TIME = 5.0  # seconds (Time recorded before the trigger)
 POST_EVENT_TIME = 15.0 # seconds (Time recorded after the event ends)
 MIN_EVENT_DURATION = 2.0  # seconds
 
+STATUS_PIN = 17
+ACTIVITY_PIN = 18
+
 # Define default sensor and plot settings.
 enable_lvdt = True
 enable_accel = True
@@ -230,6 +233,9 @@ def create_system_config():
     Returns:
         configurator.SystemConfig: System configuration object.
     """
+    
+    gpio_pins_list = [STATUS_PIN, ACTIVITY_PIN]
+
     from identitwin.configurator import SystemConfig
     config = SystemConfig(
         enable_lvdt=enable_lvdt,
@@ -237,11 +243,11 @@ def create_system_config():
         sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
         sampling_rate_lvdt=LVDT_SAMPLING_RATE,
         plot_refresh_rate=PLOT_REFRESH_RATE,
+        gpio_pins=gpio_pins_list,
         output_dir=None,
         num_lvdts=NUM_LVDTS,
         num_accelerometers=NUM_ACCELS,
         lvdt_slopes=LVDT_SLOPES,
-        gpio_pins=None,
         trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
         detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
         trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,

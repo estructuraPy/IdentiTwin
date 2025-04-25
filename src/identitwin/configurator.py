@@ -123,8 +123,6 @@ class SystemConfig:
         self.lvdt_slopes = lvdt_slopes
         self.num_accelerometers = num_accelerometers
 
-
-        
         # Sampling rates - use provided values directly
         self.sampling_rate_acceleration = sampling_rate_acceleration
         self.sampling_rate_lvdt = sampling_rate_lvdt
@@ -218,32 +216,41 @@ class SystemConfig:
         return thresholds
 
     def initialize_leds(self):
-        """Initialize LED indicators for Raspberry Pi hardware."""
-        global LED
-        if LED is None:
-            print("Warning: Cannot initialize LEDs, 'gpiozero' library not available or failed to import.")
-            return None, None
+        """Initialize LED indicators using pins specified in self.gpio_pins."""
+        global LED  # Reference the potentially imported LED class
 
         if not self.gpio_pins or len(self.gpio_pins) < 2:
-            print("Warning: GPIO pins not configured correctly. Using default pins 18 and 17.")
-            self.gpio_pins = [17, 18]
+            print("Warning: GPIO pins not configured correctly. Using default pins 17 and 18 for NonFunctionalLED.")
+            # Fallback to non-functional with default pins if config is wrong
+            return NonFunctionalLED(17), NonFunctionalLED(18)
+
+        status_pin = self.gpio_pins[0]
+        activity_pin = self.gpio_pins[1]
+
+        # Check if the hardware library (gpiozero.LED) is available
+        if LED is None or not I2C_AVAILABLE:
+            print(f"Warning: Hardware LED control not available. Using NonFunctionalLED for pins {status_pin}, {activity_pin}.")
+            # Return non-functional substitutes using configured pins
+            return NonFunctionalLED(status_pin), NonFunctionalLED(activity_pin)
 
         try:
-            # Ensure GPIO pins are released by manually resetting them
-            from gpiozero import Device
-            from gpiozero.pins.native import NativeFactory
-            Device.pin_factory = NativeFactory()
+            # Attempt to initialize hardware LEDs using configured pins
+            status_led = LED(status_pin)
+            activity_led = LED(activity_pin)
 
-            # Initialize LEDs
-            status_led = LED(self.gpio_pins[0])
-            activity_led = LED(self.gpio_pins[1])
-            status_led.on()
+            # Ensure LEDs start in the OFF state
+            status_led.off()
             activity_led.off()
-            print(f"LEDs initialized on GPIO pins: {self.gpio_pins[0]}, {self.gpio_pins[1]}")
+
+            print(f"Hardware LEDs initialized on GPIO pins: {status_pin} (Status), {activity_pin} (Activity)")
             return status_led, activity_led
+
         except Exception as e:
-            print(f"Error initializing LEDs: {e}")
-            return None, None
+            # Catch any error during hardware initialization
+            print(f"Error initializing hardware LEDs on pins {status_pin}, {activity_pin}: {e}")
+            print("Falling back to NonFunctionalLED.")
+            # Return non-functional substitutes on error using configured pins
+            return NonFunctionalLED(status_pin), NonFunctionalLED(activity_pin)
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
@@ -254,7 +261,7 @@ class SystemConfig:
             # Initialize I2C bus
             i2c = busio.I2C(board.SCL, board.SDA)
             ads = ADS.ADS1115(i2c)
-            ads.gain = 2 / 3  # Gain of 2/3 (+-6.144V)
+            ads.gain = self.lvdt_gain   # Gain of 2/3 (+-6.144V)
             print("ADS1115 initialized successfully.")
             return ads
         except Exception as e:
@@ -347,26 +354,9 @@ class NonFunctionalLED:
         pass
 
 # Utility functions
-def leds(gpio_pins):
-    """Initialize LEDs connected to the specified GPIO pins."""
-    try:
-        return LED(gpio_pins[0]), LED(gpio_pins[1])
-    except Exception as e:
-        print(f"Warning: Could not initialize LEDs: {e}")
-        return NonFunctionalLED(gpio_pins[0]), NonFunctionalLED(gpio_pins[1])
+# Removed leds() function
 
-
-def ads1115():
-    """Initialize the ADS1115 ADC."""
-    try:
-        i2c = busio.I2C(board.SCL, board.SDA)
-        ads = ADS.ADS1115(i2c)
-        ads.gain = 2.0 / 3.0  # Gain can be adjusted as needed
-        return ads
-    except Exception as e:
-        print(f"Error initializing ADS1115: {e}")
-        return None
-
+# Removed ads1115() function
 
 def thresholds(trigger_acceleration, trigger_displacement, pre_time, enable_accel, enable_lvdt):
     """Initialize thresholds for event detection."""
