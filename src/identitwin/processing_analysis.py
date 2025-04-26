@@ -26,40 +26,32 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from datetime import datetime
-from .processing_data import extract_data_from_event  # Add this import
+from .processing_data import extract_data_from_event  # existing import
 import traceback  # Add this import for exception handling
+from scipy.fft import fft, fftfreq
 
 def calculate_fft(data, sampling_rate):
-    """Calculate one‐sided FFT with DC removal and correct normalization."""
+    """Calculate one‑sided FFT matching visualization style."""
     if sampling_rate <= 0:
         print(f"Warning: Invalid sampling rate ({sampling_rate}) for FFT calculation.")
         return np.array([]), np.array([]), np.array([]), np.array([])
 
-    # Datasets por eje
+    # Number of samples
     n = len(data.get('x', []))
-    if n == 0:
+    if n < 2:
         return np.array([]), np.array([]), np.array([]), np.array([])
 
-    # Detrend: restar media
-    axes = {}
-    for axis in ['x','y','z']:
-        arr = np.nan_to_num(data.get(axis, np.zeros(n)))
-        axes[axis] = arr - np.mean(arr)
-
-    # Hanning window
+    # Hanning window + FFT from scipy
     window = np.hanning(n)
-    window_sum = np.sum(window)
+    arrs = {axis: (np.nan_to_num(data.get(axis, np.zeros(n))) - np.mean(data.get(axis, []))) * window
+            for axis in ['x','y','z']}
 
-    # FFT y normalización
-    fft_results = {}
-    for axis, signal in axes.items():
-        y = np.fft.rfft(signal * window)
-        # One-sided amplitude spectrum
-        fft_results[axis] = 2.0 * np.abs(y) / window_sum
-
-    # Frecuencias hasta Nyquist
-    freqs = np.fft.rfftfreq(n, d=1.0/sampling_rate)
-    return freqs, fft_results['x'], fft_results['y'], fft_results['z']
+    # Full FFT and frequencies
+    yx = np.abs(fft(arrs['x']))[:n//2]
+    yy = np.abs(fft(arrs['y']))[:n//2]
+    yz = np.abs(fft(arrs['z']))[:n//2]
+    freqs = fftfreq(n, d=1.0/sampling_rate)[:n//2]
+    return freqs, yx, yy, yz
 
 def calculate_rms(data):
     """Calculate RMS value of data."""
@@ -291,7 +283,7 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                         data_filtered = data[mask] + 1e-10
                         freqs_filtered = freqs[mask]
                         
-                        ax_fft.semilogy(freqs_filtered, data_filtered, color=color, 
+                        ax_fft.plot(freqs_filtered, data_filtered, color=color, 
                                      label=label, alpha=0.8, linewidth=1)
 
                     # Set FFT plot parameters
