@@ -204,20 +204,30 @@ def run_dashboard(system_monitor):
     def run():
         import logging
         import socket
+        import webbrowser
+        import time
         
         # Configure logging for better error feedback
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
         
-        # Get local IP address for better connection info
+        # Use specific IP address for external access
         try:
-            hostname = socket.gethostname()
-            local_ip = socket.gethostbyname(hostname)
-            print(f"\nDashboard starting on host: {hostname} ({local_ip})")
-            print(f"Access locally at: http://localhost:8050")
-            print(f"Access from other devices at: http://{local_ip}:8050\n")
+            external_ip = "192.168.5.199"
+            dashboard_url = f"http://{external_ip}:8050"
+            external_url = f"http://{external_ip}:8050"
+            print(f"\nAccess from other devices at: {external_url}\n")
+            
+            # Open browser in a separate thread after a short delay
+            # to ensure server is ready
+            def open_browser():
+                time.sleep(1.5)  # Give the server a bit of time to start
+                webbrowser.open_new(dashboard_url)
+                
+            browser_thread = threading.Thread(target=open_browser)
+            browser_thread.daemon = True
+            browser_thread.start()
             
             # Start the server with specific host binding
-            # Using '0.0.0.0' to listen on all network interfaces
             app.run(debug=False, host='0.0.0.0', port=8050)
         except Exception as e:
             print(f"ERROR starting dashboard: {e}")
