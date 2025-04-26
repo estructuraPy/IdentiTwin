@@ -351,11 +351,7 @@ def create_analysis_plots(np_data, fft_results_list, timestamp_str, filename, co
                         
                         if len(lvdt_times) > 0:
                             ax.plot(lvdt_times, lvdt_data, 
-                                   label=f'LVDT {lvdt_idx+1}',
-                                   marker='.',        # Add markers
-                                   markersize=4,      # Small markers
-                                   linestyle='-',     # Solid line between points
-                                   alpha=0.8)         # Slight transparency
+                                   label=f'LVDT {lvdt_idx+1}', linestyle='-', alpha=0.8)
                             plotted_lvdt = True
                         
                 if plotted_lvdt:

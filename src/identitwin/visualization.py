@@ -286,10 +286,11 @@ def create_dashboard(system_monitor):
 
         for i, buf in ACC_BUFFER.items():
             if show_all or i in sel_idxs:
-                times = [entry[0] for entry in buf]
+                buf_copy = list(buf)  # create a copy to prevent mutation during iteration
+                times = [entry[0] for entry in buf_copy]
                 for comp in comps:
                     idx = comp_map.get(comp)
-                    vals = [entry[idx] for entry in buf]
+                    vals = [entry[idx] for entry in buf_copy]
                     base = COMPONENT_COLORS[comp]
                     color = _shade_color(base, dark=(i % 2 == 1))
                     fig.add_trace(go.Scatter(
