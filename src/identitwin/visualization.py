@@ -18,7 +18,7 @@ from scipy.fft import fft, fftfreq
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
 
-PALETTE = ['#C6203E', '#00217E', '#BCBEC0', '#000000']
+PALETTE = ['#A97830','#296F8C', '#BCBEC0', '#000000']
 
 # Store historical LVDT/ACC data for scatter plots (legacy, unused)
 LVDT_HISTORY = {}
@@ -41,7 +41,6 @@ SENSOR_COLORS = [
 
 # add base colors per component
 COMPONENT_COLORS = {
-    'magnitude': '#BCBEC0',
     'x': '#FF5733',
     'y': '#33FF57',
     'z': '#3357FF'
@@ -111,19 +110,19 @@ def create_dashboard(system_monitor):
                                 multi=True,
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
+                        
                         html.Div([   # componente ahora multi-select
                             html.Label("Select Component:"),
                             dcc.Dropdown(
                                 id='acc-component-selector',
                                 options=[
                                     {'label': 'All', 'value': 'all'},
-                                    {'label': 'Magnitude', 'value': 'magnitude'},
                                     {'label': 'X', 'value': 'x'},
                                     {'label': 'Y', 'value': 'y'},
                                     {'label': 'Z', 'value': 'z'}
                                 ],
-                                value=['magnitude'],
+                                value=['all'],
                                 multi=True,
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
@@ -157,16 +156,15 @@ def create_dashboard(system_monitor):
                                 id='fft-component-selector',
                                 options=[
                                     {'label':'All','value':'all'},
-                                    {'label':'Magnitude','value':'magnitude'},
                                     {'label':'X','value':'x'},
                                     {'label':'Y','value':'y'},
                                     {'label':'Z','value':'z'}
                                 ],
-                                value=['magnitude'],
+                                value=['all'],            # default to all => x,y,z
                                 multi=True,
                                 style={'color':'black','backgroundColor':PALETTE[2]}
                             )
-                        ], style={'width':'50%','margin':'auto','marginBottom':'20px'}),
+                        ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
                         dcc.Graph(id='fft-plot')
                     ]
                 )
@@ -278,26 +276,21 @@ def create_dashboard(system_monitor):
         show_all = 'all' in selected_accs
         sel_idxs = [int(i) for i in selected_accs if i != 'all']
 
-        # component filtering
-        if selected_comps is None:
-            comps = ['magnitude']
-        elif not isinstance(selected_comps, list):
-            comps = [selected_comps]
-        else:
-            comps = selected_comps
-        # si 'all', graficar solo x,y,z
-        if 'all' in comps:
+        # component filtering: only x, y, z
+        if not selected_comps or 'all' in selected_comps:
             comps = ['x','y','z']
+        else:
+            comps = [c for c in selected_comps if c in COMPONENT_COLORS]
 
-        comp_map = {'magnitude':1, 'x':2, 'y':3, 'z':4}
+        comp_map = {'x':2, 'y':3, 'z':4}
 
         for i, buf in ACC_BUFFER.items():
             if show_all or i in sel_idxs:
                 times = [entry[0] for entry in buf]
                 for comp in comps:
-                    idx = comp_map.get(comp,1)
+                    idx = comp_map.get(comp)
                     vals = [entry[idx] for entry in buf]
-                    base = COMPONENT_COLORS.get(comp, COMPONENT_COLORS['magnitude'])
+                    base = COMPONENT_COLORS[comp]
                     color = _shade_color(base, dark=(i % 2 == 1))
                     fig.add_trace(go.Scatter(
                         x=times, y=vals, mode='lines',
@@ -364,15 +357,11 @@ def create_dashboard(system_monitor):
             window = np.hanning(FFT_BUFFER_SIZE)
 
             # normalizar selección de componentes
-            if selected_comps is None:
-                comps = ['magnitude']
-            elif not isinstance(selected_comps, list):
-                comps = [selected_comps]
-            else:
-                comps = selected_comps
-            # si 'all', excluir magnitud
-            if 'all' in comps:
+            # component filtering: only x, y, z
+            if not selected_comps or 'all' in selected_comps:
                 comps = ['x','y','z']
+            else:
+                comps = [c for c in selected_comps if c in COMPONENT_COLORS]
 
             for i, bufs in FFT_BUFFERS.items():
                 if show_all or i in sel_idxs:
@@ -381,7 +370,7 @@ def create_dashboard(system_monitor):
                         if len(data) != FFT_BUFFER_SIZE:
                             continue
                         spec = np.abs(fft(data * window))[:FFT_BUFFER_SIZE//2]
-                        base_color = COMPONENT_COLORS.get(comp, COMPONENT_COLORS['magnitude'])
+                        base_color = COMPONENT_COLORS[comp]
                         color = _shade_color(base_color, dark=(i % 2 == 1))
                         fig.add_trace(go.Scatter(
                             x=freqs, y=spec,
@@ -390,9 +379,9 @@ def create_dashboard(system_monitor):
                         ))
 
             fig.update_layout(
-                title='FFT Accelerómetros',
+                title='FFT Accelerometers',
                 xaxis={
-                    'title':'Frecuencia (Hz)',
+                    'title':'Frequency (Hz)',
                     'color': PALETTE[3],
                     'range': [0.5, float(freqs.max())]
                 },
@@ -400,7 +389,7 @@ def create_dashboard(system_monitor):
                 paper_bgcolor=PALETTE[2],
                 plot_bgcolor=PALETTE[2],
                 font={'color':PALETTE[3]},
-                height=500,
+                height=400,
                 margin={'l':40,'r':40,'t':80,'b':40},
                 showlegend=True
             )
