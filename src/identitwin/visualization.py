@@ -26,11 +26,7 @@ ACC_HISTORY = {}
 MAX_POINTS = 1000        
 # Añadir buffer FFT potencia de 2
 FFT_BUFFER_SIZE = 1024  # potencia de 2 >= muestras necesarias
-FFT_BUFFERS = {
-    'x': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
-    'y': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
-    'z': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE)
-}
+FFT_BUFFERS = {}        # sensor_index -> {'magnitude','x','y','z'} -> deque
 
 # Real‐time sampling buffers
 LVDT_BUFFER = {}     # sensor_index -> deque of (t, displacement)
@@ -76,7 +72,7 @@ def create_dashboard(system_monitor):
                     label="Displacements",
                     value=tab_value,
                     children=[
-                        html.H3("LVDT Displacements", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                        html.H3("Displacements", style={'textAlign': 'center', 'color': PALETTE[1]}),
                         html.Div([
                             html.Label("Select LVDT:"),
                             dcc.Dropdown(
@@ -88,7 +84,7 @@ def create_dashboard(system_monitor):
                                 multi=True,
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
                         dcc.Graph(id='lvdt-plot')
                     ]
                 )
@@ -116,7 +112,7 @@ def create_dashboard(system_monitor):
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
                         ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
-                        html.Div([   # new component selector
+                        html.Div([   # componente ahora multi-select
                             html.Label("Select Component:"),
                             dcc.Dropdown(
                                 id='acc-component-selector',
@@ -127,25 +123,50 @@ def create_dashboard(system_monitor):
                                     {'label': 'Y', 'value': 'y'},
                                     {'label': 'Z', 'value': 'z'}
                                 ],
-                                value='magnitude',
+                                value=['magnitude'],
+                                multi=True,
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
                         dcc.Graph(id='acceleration-plot')
                     ]
                 )
             )
             
         if system_monitor.config.enable_fft_plots:
-            tab_value = "fft"
-            if default_tab is None:
-                default_tab = tab_value
             tabs_children.append(
                 dcc.Tab(
-                    label="FFT",
-                    value=tab_value,
+                    label="FFT Analysis",
+                    value="fft",
                     children=[
                         html.H3("FFT Analysis", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                        html.Div([
+                            html.Label("Select Accelerometer:"),
+                            dcc.Dropdown(
+                                id='fft-acc-selector',
+                                options=[{'label':'All','value':'all'}] +
+                                        [{'label':f'ACC {i+1}','value':str(i)} 
+                                         for i in range(system_monitor.config.num_accelerometers)],
+                                value='all', multi=True,
+                                style={'color':'black','backgroundColor':PALETTE[2]}
+                            )
+                        ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
+                        html.Div([
+                            html.Label("Select Component:"),
+                            dcc.Dropdown(
+                                id='fft-component-selector',
+                                options=[
+                                    {'label':'All','value':'all'},
+                                    {'label':'Magnitude','value':'magnitude'},
+                                    {'label':'X','value':'x'},
+                                    {'label':'Y','value':'y'},
+                                    {'label':'Z','value':'z'}
+                                ],
+                                value=['magnitude'],
+                                multi=True,
+                                style={'color':'black','backgroundColor':PALETTE[2]}
+                            )
+                        ], style={'width':'50%','margin':'auto','marginBottom':'20px'}),
                         dcc.Graph(id='fft-plot')
                     ]
                 )
@@ -242,7 +263,7 @@ def create_dashboard(system_monitor):
          Input('acc-selector', 'value'),
          Input('acc-component-selector', 'value')]
     )
-    def update_acceleration_graph(n, selected_accs, selected_comp):
+    def update_acceleration_graph(n, selected_accs, selected_comps):
         if not ACC_BUFFER:
             return go.Figure()
 
@@ -256,23 +277,23 @@ def create_dashboard(system_monitor):
         sel_idxs = [int(i) for i in selected_accs if i != 'all']
 
         # component filtering
-        comp = selected_comp or 'magnitude'
+        if selected_comps is None:
+            comps = ['magnitude']
+        elif not isinstance(selected_comps, list):
+            comps = [selected_comps]
+        else:
+            comps = selected_comps
+        # si 'all', graficar solo x,y,z
+        if 'all' in comps:
+            comps = ['x','y','z']
+
         comp_map = {'magnitude':1, 'x':2, 'y':3, 'z':4}
 
         for i, buf in ACC_BUFFER.items():
             if show_all or i in sel_idxs:
                 times = [entry[0] for entry in buf]
-                if comp == 'all':
-                    for name, idx in comp_map.items():
-                        vals = [entry[idx] for entry in buf]
-                        base = COMPONENT_COLORS[name]
-                        color = _shade_color(base, dark=(i % 2 == 1))
-                        fig.add_trace(go.Scatter(
-                            x=times, y=vals, mode='lines',
-                            line={'color': color}, name=f'ACC {i+1} {name.upper()}'
-                        ))
-                else:
-                    idx = comp_map.get(comp, 1)
+                for comp in comps:
+                    idx = comp_map.get(comp,1)
                     vals = [entry[idx] for entry in buf]
                     base = COMPONENT_COLORS.get(comp, COMPONENT_COLORS['magnitude'])
                     color = _shade_color(base, dark=(i % 2 == 1))
@@ -322,32 +343,64 @@ def create_dashboard(system_monitor):
     if system_monitor.config.enable_fft_plots:
         @app.callback(
             Output('fft-plot', 'figure'),
-            [Input('interval-component', 'n_intervals')]
+            [
+                Input('interval-component', 'n_intervals'),
+                Input('fft-acc-selector', 'value'),
+                Input('fft-component-selector', 'value')
+            ]
         )
-        def update_fft_graph(n):
-            # usar buffers prellenados
-            data_x = np.array(FFT_BUFFERS['x'])
-            data_y = np.array(FFT_BUFFERS['y'])
-            data_z = np.array(FFT_BUFFERS['z'])
-            # ventana Hanning
-            w = np.hanning(len(data_x))
-            xw, yw, zw = data_x*w, data_y*w, data_z*w
-            # FFT
-            fx, fy, fz = np.abs(fft(xw)), np.abs(fft(yw)), np.abs(fft(zw))
-            # frecuencias
-            dt = 1.0 / system_monitor.config.sampling_rate_acceleration
-            freqs = fftfreq(FFT_BUFFER_SIZE, dt)
-            n2 = len(freqs)//2
-            # construir figura
+        def update_fft_graph(n, selected_accs, selected_comps):
+            # normalizar selección de sensores
+            if selected_accs is None or not isinstance(selected_accs, list):
+                selected_accs = [selected_accs] if selected_accs else ['all']
+            show_all = 'all' in selected_accs
+            sel_idxs = [int(i) for i in selected_accs if i!='all']
+
+            # preparar figura
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=freqs[:n2], y=fx[:n2], name='X', line={'color': COMPONENT_COLORS['x']}))
-            fig.add_trace(go.Scatter(x=freqs[:n2], y=fy[:n2], name='Y', line={'color': COMPONENT_COLORS['y']}))
-            fig.add_trace(go.Scatter(x=freqs[:n2], y=fz[:n2], name='Z', line={'color': COMPONENT_COLORS['z']}))
+            freqs = fftfreq(FFT_BUFFER_SIZE, 1.0/system_monitor.config.sampling_rate_acceleration)[:FFT_BUFFER_SIZE//2]
+            window = np.hanning(FFT_BUFFER_SIZE)
+
+            # normalizar selección de componentes
+            if selected_comps is None:
+                comps = ['magnitude']
+            elif not isinstance(selected_comps, list):
+                comps = [selected_comps]
+            else:
+                comps = selected_comps
+            # si 'all', excluir magnitud
+            if 'all' in comps:
+                comps = ['x','y','z']
+
+            for i, bufs in FFT_BUFFERS.items():
+                if show_all or i in sel_idxs:
+                    for comp in comps:
+                        data = np.array(bufs.get(comp, []))
+                        if len(data) != FFT_BUFFER_SIZE:
+                            continue
+                        spec = np.abs(fft(data * window))[:FFT_BUFFER_SIZE//2]
+                        base_color = COMPONENT_COLORS.get(comp, COMPONENT_COLORS['magnitude'])
+                        color = _shade_color(base_color, dark=(i % 2 == 1))
+                        fig.add_trace(go.Scatter(
+                            x=freqs, y=spec,
+                            name=f'ACC {i+1} {comp.upper()}',
+                            line={'color': color}
+                        ))
+
             fig.update_layout(
-                title='FFT Acelerómetro 1',
-                xaxis={'title':'Frecuencia (Hz)'}, yaxis={'title':'Amplitud'},
-                paper_bgcolor=PALETTE[2], plot_bgcolor=PALETTE[2], font={'color': PALETTE[3]},
-                height=500, margin={'l':40,'r':40,'t':80,'b':40}, showlegend=True
+                title='FFT Accelerómetros',
+                xaxis={
+                    'title':'Frecuencia (Hz)',
+                    'color': PALETTE[3],
+                    'range': [0.5, float(freqs.max())]
+                },
+                yaxis={'title':'Amplitud', 'color': PALETTE[3]},
+                paper_bgcolor=PALETTE[2],
+                plot_bgcolor=PALETTE[2],
+                font={'color':PALETTE[3]},
+                height=500,
+                margin={'l':40,'r':40,'t':80,'b':40},
+                showlegend=True
             )
             return fig
     
@@ -404,11 +457,19 @@ def run_dashboard(system_monitor):
                         s.get('y', 0),
                         s.get('z', 0)
                     ))
-                    # actualizar FFT buffer solo para el sensor 0
-                    if i == 0:
-                        FFT_BUFFERS['x'].append(s.get('x', 0))
-                        FFT_BUFFERS['y'].append(s.get('y', 0))
-                        FFT_BUFFERS['z'].append(s.get('z', 0))
+                    # inicializar FFT_BUFFERS para sensor i
+                    if i not in FFT_BUFFERS:
+                        FFT_BUFFERS[i] = {
+                            'magnitude': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
+                            'x': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
+                            'y': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
+                            'z': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE)
+                        }
+                    # actualizar FFT de cada componente
+                    FFT_BUFFERS[i]['magnitude'].append(s.get('magnitude',0))
+                    FFT_BUFFERS[i]['x'].append(s.get('x',0))
+                    FFT_BUFFERS[i]['y'].append(s.get('y',0))
+                    FFT_BUFFERS[i]['z'].append(s.get('z',0))
                 _t.sleep(period)
 
         threading.Thread(target=lvdt_sampler, daemon=True).start()

@@ -168,9 +168,9 @@ class DummyMPU6050:
 
         if self.state == "periodic":
             # Periodic signals
-            periodic_signal_x = 7.5 * math.sin(t * 2 * math.pi * 2) + 1.5 * math.sin(t * 2 * math.pi * 3.7)
-            periodic_signal_y = 5.5 * math.cos(t * 2 * math.pi * 2.5) + 1.5 * math.cos(t * 2 * math.pi * 3.75)
-            periodic_signal_z = 7.5 * math.sin(t * 2 * math.pi * 2.1) + 1.5 * math.sin(t * 2 * math.pi * 3.8)
+            periodic_signal_x = 7.5 * math.sin(t * 2 * math.pi * 20) + 1.5 * math.sin(t * 2 * math.pi * 35)
+            periodic_signal_y = 5.5 * math.cos(t * 2 * math.pi * 22) + 1.5 * math.cos(t * 2 * math.pi * 37)
+            periodic_signal_z = 7.5 * math.sin(t * 2 * math.pi * 20) + 1.5 * math.sin(t * 2 * math.pi * 35)
 
             # Apply the smooth transition to periodic signals
             periodic_signal_x = self._apply_smooth_transition(periodic_signal_x)
