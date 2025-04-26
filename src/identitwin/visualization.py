@@ -25,7 +25,7 @@ MAX_POINTS = 1000
 
 # Real‐time sampling buffers
 LVDT_BUFFER = {}     # sensor_index -> deque of (t, displacement)
-ACC_BUFFER = {}      # sensor_index -> deque of (t, magnitude)
+ACC_BUFFER = {}      # sensor_index -> deque of (t, magnitude, x, y, z)
 
 # Custom color set for sensor lines
 SENSOR_COLORS = [
@@ -33,6 +33,21 @@ SENSOR_COLORS = [
     '#33FFF5', '#F533FF', '#FF8C33', '#8CFF33', 
     '#338CFF', '#FF338C', '#33FFC4', '#C433FF'
 ]
+
+# add base colors per component
+COMPONENT_COLORS = {
+    'magnitude': '#BCBEC0',
+    'x': '#FF5733',
+    'y': '#33FF57',
+    'z': '#3357FF'
+}
+def _shade_color(hex_color, dark=False):
+    # darken by factor or leave as is
+    hex_color = hex_color.lstrip('#')
+    r, g, b = (int(hex_color[i:i+2],16) for i in (0,2,4))
+    factor = 0.6 if dark else 1.0
+    r, g, b = [max(0, min(255,int(c*factor))) for c in (r,g,b)]
+    return f'#{r:02X}{g:02X}{b:02X}'
 
 def create_dashboard(system_monitor):
     """Create and configure the Dash application."""
@@ -89,6 +104,21 @@ def create_dashboard(system_monitor):
                                          for i in range(system_monitor.config.num_accelerometers)],
                                 value='all',
                                 multi=True,
+                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                            ),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        html.Div([   # new component selector
+                            html.Label("Select Component:"),
+                            dcc.Dropdown(
+                                id='acc-component-selector',
+                                options=[
+                                    {'label': 'All', 'value': 'all'},
+                                    {'label': 'Magnitude', 'value': 'magnitude'},
+                                    {'label': 'X', 'value': 'x'},
+                                    {'label': 'Y', 'value': 'y'},
+                                    {'label': 'Z', 'value': 'z'}
+                                ],
+                                value='magnitude',
                                 style={'color': 'black', 'backgroundColor': PALETTE[2]}
                             ),
                         ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
@@ -200,13 +230,15 @@ def create_dashboard(system_monitor):
     @app.callback(
         Output('acceleration-plot', 'figure'),
         [Input('interval-component', 'n_intervals'),
-         Input('acc-selector', 'value')]
+         Input('acc-selector', 'value'),
+         Input('acc-component-selector', 'value')]
     )
-    def update_acceleration_graph(n, selected_accs):
+    def update_acceleration_graph(n, selected_accs, selected_comp):
         if not ACC_BUFFER:
             return go.Figure()
 
         fig = go.Figure()
+        # sensor filtering
         if selected_accs is None:
             selected_accs = ['all']
         elif not isinstance(selected_accs, list):
@@ -214,16 +246,31 @@ def create_dashboard(system_monitor):
         show_all = 'all' in selected_accs
         sel_idxs = [int(i) for i in selected_accs if i != 'all']
 
+        # component filtering
+        comp = selected_comp or 'magnitude'
+        comp_map = {'magnitude':1, 'x':2, 'y':3, 'z':4}
+
         for i, buf in ACC_BUFFER.items():
             if show_all or i in sel_idxs:
-                xs, ys = zip(*buf) if buf else ([], [])
-                fig.add_trace(go.Scatter(
-                    x=list(xs),
-                    y=list(ys),
-                    mode='lines',
-                    line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
-                    name=f'ACC {i+1}'
-                ))
+                times = [entry[0] for entry in buf]
+                if comp == 'all':
+                    for name, idx in comp_map.items():
+                        vals = [entry[idx] for entry in buf]
+                        base = COMPONENT_COLORS[name]
+                        color = _shade_color(base, dark=(i % 2 == 1))
+                        fig.add_trace(go.Scatter(
+                            x=times, y=vals, mode='lines',
+                            line={'color': color}, name=f'ACC {i+1} {name.upper()}'
+                        ))
+                else:
+                    idx = comp_map.get(comp, 1)
+                    vals = [entry[idx] for entry in buf]
+                    base = COMPONENT_COLORS.get(comp, COMPONENT_COLORS['magnitude'])
+                    color = _shade_color(base, dark=(i % 2 == 1))
+                    fig.add_trace(go.Scatter(
+                        x=times, y=vals, mode='lines',
+                        line={'color': color}, name=f'ACC {i+1} {comp.upper()}'
+                    ))
 
         # Calculate offset for relative time display
         offset = 0
@@ -319,7 +366,14 @@ def run_dashboard(system_monitor):
                 for i, s in enumerate(data):
                     if i not in buf:
                         buf[i] = deque(maxlen=MAX_POINTS)
-                    buf[i].append((t, s.get('magnitude', 0)))
+                    # store time, magnitude, x, y, z
+                    buf[i].append((
+                        t,
+                        s.get('magnitude', 0),
+                        s.get('x', 0),
+                        s.get('y', 0),
+                        s.get('z', 0)
+                    ))
                 _t.sleep(period)
 
         threading.Thread(target=lvdt_sampler, daemon=True).start()
