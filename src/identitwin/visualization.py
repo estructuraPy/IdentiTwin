@@ -31,57 +31,97 @@ SENSOR_COLORS = [
 def create_dashboard(system_monitor):
     """Create and configure the Dash application."""
     app = dash.Dash(__name__)
-
-    app.layout = html.Div([
-        html.H1("IdentiTwin Real-Time Monitoring",
-                style={'textAlign': 'center', 'color': PALETTE[0]}),
-
-        # LVDT section with dropdown selector
-        html.Div([
-            html.H3("LVDT Displacements", 
-                    style={'textAlign': 'center', 'color': PALETTE[1]}),
-            html.Div([
-                html.Label("Select LVDT:"),
-                dcc.Dropdown(
-                    id='lvdt-selector',
-                    options=[{'label': 'All', 'value': 'all'}] +
-                            [{'label': f'LVDT {i+1}', 'value': str(i)} 
-                             for i in range(system_monitor.config.num_lvdts)],
-                    value='all',
-                    multi=True,
-                    style={'color': 'black', 'backgroundColor': PALETTE[2]}
-                ),
-            ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
-            dcc.Graph(id='lvdt-plot'),
-        ]) if system_monitor.config.enable_plot_displacement else None,
+    
+    # Build tabs based on config options
+    if system_monitor.config.enable_plots:
+        default_tab = None
+        tabs_children = []
         
-        # Acceleration section with dropdown selector
-        html.Div([
-            html.H3("Accelerations", 
-                    style={'textAlign': 'center', 'color': PALETTE[1]}),
-            html.Div([
-                html.Label("Select Accelerometer:"),
-                dcc.Dropdown(
-                    id='acc-selector',
-                    options=[{'label': 'All', 'value': 'all'}] +
-                            [{'label': f'ACC {i+1}', 'value': str(i)} 
-                             for i in range(system_monitor.config.num_accelerometers)],
-                    value='all',
-                    multi=True,
-                    style={'color': 'black', 'backgroundColor': PALETTE[2]}
-                ),
-            ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
-            dcc.Graph(id='acceleration-plot'),
-        ]) if system_monitor.config.enable_plot_displacement else None,
-        
-        # Update interval
-        dcc.Interval(
-            id='interval-component',
-            interval=int(1000/system_monitor.config.plot_refresh_rate),  # ms per update
-            n_intervals=0
-        )
-    ])
-
+        if system_monitor.config.enable_plot_displacement:
+            tab_value = "displacements"
+            if default_tab is None:
+                default_tab = tab_value
+            tabs_children.append(
+                dcc.Tab(
+                    label="Displacements",
+                    value=tab_value,
+                    children=[
+                        html.H3("LVDT Displacements", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                        html.Div([
+                            html.Label("Select LVDT:"),
+                            dcc.Dropdown(
+                                id='lvdt-selector',
+                                options=[{'label': 'All', 'value': 'all'}] +
+                                        [{'label': f'LVDT {i+1}', 'value': str(i)} 
+                                         for i in range(system_monitor.config.num_lvdts)],
+                                value='all',
+                                multi=True,
+                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                            ),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        dcc.Graph(id='lvdt-plot')
+                    ]
+                )
+            )
+            
+        if system_monitor.config.enable_accel_plots:
+            tab_value = "accelerations"
+            if default_tab is None:
+                default_tab = tab_value
+            tabs_children.append(
+                dcc.Tab(
+                    label="Accelerations",
+                    value=tab_value,
+                    children=[
+                        html.H3("Accelerations", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                        html.Div([
+                            html.Label("Select Accelerometer:"),
+                            dcc.Dropdown(
+                                id='acc-selector',
+                                options=[{'label': 'All', 'value': 'all'}] +
+                                        [{'label': f'ACC {i+1}', 'value': str(i)} 
+                                         for i in range(system_monitor.config.num_accelerometers)],
+                                value='all',
+                                multi=True,
+                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                            ),
+                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
+                        dcc.Graph(id='acceleration-plot')
+                    ]
+                )
+            )
+            
+        if system_monitor.config.enable_fft_plots:
+            tab_value = "fft"
+            if default_tab is None:
+                default_tab = tab_value
+            tabs_children.append(
+                dcc.Tab(
+                    label="FFT",
+                    value=tab_value,
+                    children=[
+                        html.H3("FFT Analysis", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                        dcc.Graph(id='fft-plot')
+                    ]
+                )
+            )
+            
+        layout_children = [
+            html.H1("IdentiTwin Real-Time Monitoring",
+                    style={'textAlign': 'center', 'color': PALETTE[0]}),
+            dcc.Tabs(id='tabs', value=default_tab, children=tabs_children),
+            dcc.Interval(
+                id='interval-component',
+                interval=int(1000/system_monitor.config.plot_refresh_rate),  # ms per update
+                n_intervals=0
+            )
+        ]
+    else:
+        # Fallback layout if enable_plots is False
+        layout_children = [html.H1("IdentiTwin", style={'textAlign': 'center'})]
+    
+    app.layout = html.Div(layout_children)
+    
     @app.callback(
         Output('lvdt-plot', 'figure'),
         [Input('interval-component', 'n_intervals'),
@@ -252,6 +292,17 @@ def create_dashboard(system_monitor):
         )
         return fig
 
+    # New FFT callback if FFT tab is enabled
+    if system_monitor.config.enable_fft_plots:
+        @app.callback(
+            Output('fft-plot', 'figure'),
+            [Input('interval-component', 'n_intervals')]
+        )
+        def update_fft_graph(n):
+            # Dummy FFT handling - replace with your FFT processing as needed.
+            # For example, you could perform FFT on one of the sensor data arrays.
+            return go.Figure()
+    
     return app
 
 def run_dashboard(system_monitor):
