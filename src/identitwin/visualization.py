@@ -383,12 +383,18 @@ def create_dashboard(system_monitor):
                             line={'color': color}
                         ))
 
+            # ensure we have a valid max_freq (fall back to Nyquist or 1.0)
+            try:
+                max_freq = float(freq.max())
+            except Exception:
+                max_freq = system_monitor.config.sampling_rate_acceleration / 2
+
             fig.update_layout(
                 title='FFT Accelerometers',
                 xaxis={
                     'title':'Frequency (Hz)',
                     'color': PALETTE[3],
-                    'range': [0.5, float(freq.max())]
+                    'range': [0.5, max_freq]
                 },
                 yaxis={'title':'Amplitude', 'color': PALETTE[3]},
                 paper_bgcolor=PALETTE[2],
