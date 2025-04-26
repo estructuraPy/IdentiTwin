@@ -282,9 +282,18 @@ def run_dashboard(system_monitor):
     def run():
         import logging, socket, webbrowser, time as _t
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
-        external_ip = "192.168.5.199"
+
+        # Automatic IP detection
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            external_ip = s.getsockname()[0]
+            s.close()
+        except:
+            external_ip = "127.0.0.1"
+
         dashboard_url = f"http://{external_ip}:8050"
-        print(f"\nAccess from other devices at: {dashboard_url}\n")
+        print(f"\nAccess dashboard at: {dashboard_url}\n")
 
         # --- start sampling threads ---
         start_time = time.time()
@@ -317,17 +326,21 @@ def run_dashboard(system_monitor):
         threading.Thread(target=acc_sampler, daemon=True).start()
         # --- end sampling threads ---
 
-        # open browser after delay
+        # Attempt to open browser (will silently fail if headless)
         def open_browser():
             _t.sleep(1.5)
-            webbrowser.open_new(dashboard_url)
+            try:
+                webbrowser.open_new(dashboard_url)
+            except:
+                pass
+
         threading.Thread(target=open_browser, daemon=True).start()
 
         try:
             app.run(debug=False, host='0.0.0.0', port=8050)
         except Exception as e:
             print(f"ERROR starting dashboard: {e}")
-            print("Try http://127.0.0.1:8050 instead\n")
+            print("Try accessing at http://127.0.0.1:8050 instead\n")
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
