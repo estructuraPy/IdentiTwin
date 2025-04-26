@@ -175,6 +175,8 @@ def create_dashboard(system_monitor):
         layout_children = [
             html.H1("IdentiTwin Real-Time Monitoring",
                     style={'textAlign': 'center', 'color': PALETTE[0]}),
+            html.Img(src="https://github.com/estructuraPy/IdentiTwin/raw/main/identitwin.png",
+                     style={'width': '100px', 'margin': 'auto', 'display': 'block'}),
             dcc.Tabs(id='tabs', value=default_tab, children=tabs_children),
             dcc.Interval(
                 id='interval-component',
