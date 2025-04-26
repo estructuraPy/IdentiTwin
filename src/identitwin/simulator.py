@@ -117,7 +117,7 @@ class DummyAnalogIn:
     @property
     def voltage(self):
         t = time.time() - self._start_time
-        base_signal = self._amplitude * math.sin(2 * math.pi * self._frequency * t)
+        base_signal = self._amplitude * math.sin(2 * math.pi * self._frequency * t) / 2
         noise = random.uniform(-self._noise_level, self._noise_level)
         return base_signal + noise
 
