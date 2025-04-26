@@ -157,9 +157,11 @@ class EventMonitor:
             accel_trigger = any(mag > trigger_accel for mag in accel_magnitudes)
             lvdt_trigger = any(disp > trigger_disp for disp in disp_values)
 
-            # Check if all sensors are below detrigger threshold
-            accel_below_detrigger = all(mag < detrigger_accel for mag in accel_magnitudes) if accel_magnitudes else True
-            lvdt_below_detrigger = all(disp < detrigger_disp for disp in disp_values) if disp_values else True
+            # --- Reemplazamos aquí la condición de detrigger ---
+            # Use moving averages to determine detrigger
+            accel_below_detrigger = self.moving_avg_accel < detrigger_accel
+            lvdt_below_detrigger = self.moving_avg_disp < detrigger_disp
+            # --- fin del cambio ---
 
             # Start event if any sensor triggers
             if accel_trigger or lvdt_trigger:
