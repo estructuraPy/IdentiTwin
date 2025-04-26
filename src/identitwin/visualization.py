@@ -94,7 +94,23 @@ def create_dashboard(system_monitor):
         lvdt_data = system_monitor.display_buffer['lvdt_data']
         fig = go.Figure()
         
-        # Mejorada la lógica de selección
+        # Actualizar todos los historiales primero
+        current_time = max([hist['x'][-1] if hist['x'] else 0 for hist in LVDT_HISTORY.values()], default=0)
+        DT = 1.0/system_monitor.config.plot_refresh_rate
+        new_time = current_time + DT
+        
+        # Actualizar historiales para todos los sensores
+        for i, lvdt in enumerate(lvdt_data):
+            if i not in LVDT_HISTORY:
+                LVDT_HISTORY[i] = {'x': [], 'y': []}
+            
+            LVDT_HISTORY[i]['x'].append(new_time)
+            LVDT_HISTORY[i]['y'].append(lvdt.get('displacement', 0))
+            
+            LVDT_HISTORY[i]['x'] = LVDT_HISTORY[i]['x'][-MAX_POINTS:]
+            LVDT_HISTORY[i]['y'] = LVDT_HISTORY[i]['y'][-MAX_POINTS:]
+
+        # Determinar qué sensores mostrar
         if selected_lvdts is None:
             selected_lvdts = ['all']
         elif not isinstance(selected_lvdts, list):
@@ -103,30 +119,16 @@ def create_dashboard(system_monitor):
         show_all = 'all' in selected_lvdts
         selected_indices = [int(i) for i in selected_lvdts if i != 'all']
         
-        for i, lvdt in enumerate(lvdt_data):
-            if not show_all and i not in selected_indices:
-                continue
-                
-            displacement = lvdt.get('displacement', 0)
-            
-            # accumulate history using update rate
-            hist = LVDT_HISTORY.setdefault(i, {'x': [], 'y': []})
-            DT = 1.0/system_monitor.config.plot_refresh_rate
-            t = hist['x'][-1] + DT if hist['x'] else 0.0
-
-            hist['x'].append(t)
-            hist['y'].append(displacement)
-            # trim to fixed window
-            hist['x'] = hist['x'][-MAX_POINTS:]
-            hist['y'] = hist['y'][-MAX_POINTS:]
-            
-            # Use custom colors for sensor lines
-            fig.add_trace(go.Scatter(
-                x=hist['x'], y=hist['y'],
-                mode='lines',
-                line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
-                name=f'LVDT {i+1}'
-            ))
+        # Añadir solo los sensores seleccionados al gráfico
+        for i in LVDT_HISTORY:
+            if show_all or i in selected_indices:
+                fig.add_trace(go.Scatter(
+                    x=LVDT_HISTORY[i]['x'], 
+                    y=LVDT_HISTORY[i]['y'],
+                    mode='lines',
+                    line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
+                    name=f'LVDT {i+1}'
+                ))
         
         # Calculate offset for relative time display
         offset = 0
