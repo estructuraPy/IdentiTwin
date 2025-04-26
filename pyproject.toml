@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.44"
+version = "0.0.50"
 description = "A Tool to setup a Raspberri Pi for Structural Health Monitoring accelerations and displacements"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
