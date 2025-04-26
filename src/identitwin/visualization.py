@@ -35,7 +35,7 @@ ACC_BUFFER = {}      # sensor_index -> deque of (t, magnitude, x, y, z)
 # Custom color set for sensor lines
 SENSOR_COLORS = [
     '#FF5733', '#33FF57', '#3357FF', '#FF33A8', 
-    '#33FFF5', '#F533FF', '#FF8C33', '#8CFF33', 
+    '#33FFF5', '#F533FF', '#FF8C33', '#8CFF33',
     '#338CFF', '#FF338C', '#33FFC4', '#C433FF'
 ]
 

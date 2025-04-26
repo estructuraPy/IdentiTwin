@@ -18,6 +18,10 @@ import numpy as np
 import matplotlib
 import importlib  # Add importlib to dynamically load modules
 
+# Add the project root to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
 # Suppress warnings related to hardware detection
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message=".*chip_id.*")
@@ -44,6 +48,7 @@ from identitwin.system_monitoring import MonitoringSystem
 from identitwin import calibration
 from identitwin import report_generator
 from identitwin.calibration import calibrate_lvdt_channels
+from identitwin import state # <--- IMPORT STATE MODULE
 
 # Default values for sampling rates and thresholds.
 ACCEL_SAMPLING_RATE = 100.0  # Hz
@@ -385,29 +390,45 @@ def main():
         monitor_system.start_monitoring()
 
         # monitor loop: blink activity LED only during events
-        last_event = False
+        last_event_state = False # Use a different variable name to avoid confusion
         while monitor_system.running:
             try:
-                in_event = getattr(monitor_system, "event_active", False)
-                # start blinking activity LED when event begins
-                if in_event and not last_event:
-                    monitor_system.activity_led.blink(on_time=0.1, off_time=0.1, background=True)
-                # stop blinking when event ends
-                if not in_event and last_event:
-                    monitor_system.activity_led.off()
-                last_event = in_event
-            except Exception as led_err:
-                print(f"Warning: Activity LED control failed: {led_err}", file=sys.stderr)
-                monitor_system.activity_led = None
-            time.sleep(0.5)
+                # --- CORRECTED STATE READING ---
+                # Read the shared state variable updated by event_monitoring.py
+                current_event_state = state.get_event_variable("is_event_recording", default=False)
+                # -------------------------------
 
-        if hasattr(monitor_system, "acquisition_thread") and monitor_system.acquisition_thread.is_alive():
-            monitor_system.acquisition_thread.join(timeout=1.0)
-        if hasattr(monitor_system, "event_thread") and monitor_system.event_thread.is_alive():
-            monitor_system.event_thread.join(timeout=1.0)
+                # Check if the activity LED object exists and is usable
+                activity_led_available = hasattr(monitor_system, "activity_led") and monitor_system.activity_led is not None
 
-        summary_report_file = os.path.join(config.reports_dir, "summary_report.txt")
-        report_generator.generate_summary_report(monitor_system, summary_report_file)
+                # Start blinking activity LED when event begins
+                if current_event_state and not last_event_state:
+                    if activity_led_available:
+                        print("DEBUG INIT: Event started, starting blink.") # Debug print
+                        monitor_system.activity_led.blink(on_time=0.1, off_time=0.1, background=True)
+                    else:
+                        print("DEBUG INIT: Event started (LED missing/failed)") # Debug print
+
+                # Stop blinking when event ends
+                elif not current_event_state and last_event_state:
+                    if activity_led_available:
+                        print("DEBUG INIT: Event ended, stopping blink.") # Debug print
+                        monitor_system.activity_led.off()
+                    else:
+                        print("DEBUG INIT: Event ended (LED missing/failed)") # Debug print
+
+                last_event_state = current_event_state # Update state for next iteration
+
+            except Exception as loop_err:
+                print(f"Error in main monitoring loop: {loop_err}", file=sys.stderr)
+                traceback.print_exc() # Print full traceback for loop errors
+                # Optionally disable LED on repeated errors
+                if 'monitor_system' in locals() and hasattr(monitor_system, "activity_led"):
+                    monitor_system.activity_led = None
+
+
+            # Check state more frequently to react faster to event end
+            time.sleep(0.1) # Reduced sleep time
 
     except KeyboardInterrupt:
         print("\nProgram stopped by user")
