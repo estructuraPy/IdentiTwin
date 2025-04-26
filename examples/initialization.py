@@ -362,6 +362,14 @@ def main():
     try:
         monitor_system.setup_sensors()
 
+        # turn ON status LED continuously
+        if monitor_system.status_led:
+            monitor_system.status_led.on()
+
+        # ensure activity LED is off initially
+        if hasattr(monitor_system, "activity_led") and monitor_system.activity_led:
+            monitor_system.activity_led.off()
+
         # Add visualization if enabled
         if config.enable_lvdt:
             from identitwin.visualization import run_dashboard
@@ -376,13 +384,21 @@ def main():
 
         monitor_system.start_monitoring()
 
+        # monitor loop: blink activity LED only during events
+        last_event = False
         while monitor_system.running:
-            if monitor_system.status_led:
-                try:
-                    monitor_system.status_led.blink(on_time=0.1, off_time=0.1, n=1, background=True)
-                except Exception as led_err:
-                    print(f"Warning: Status LED blink failed: {led_err}", file=sys.stderr)
-                    monitor_system.status_led = None
+            try:
+                in_event = getattr(monitor_system, "event_active", False)
+                # start blinking activity LED when event begins
+                if in_event and not last_event:
+                    monitor_system.activity_led.blink(on_time=0.1, off_time=0.1, background=True)
+                # stop blinking when event ends
+                if not in_event and last_event:
+                    monitor_system.activity_led.off()
+                last_event = in_event
+            except Exception as led_err:
+                print(f"Warning: Activity LED control failed: {led_err}", file=sys.stderr)
+                monitor_system.activity_led = None
             time.sleep(0.5)
 
         if hasattr(monitor_system, "acquisition_thread") and monitor_system.acquisition_thread.is_alive():
