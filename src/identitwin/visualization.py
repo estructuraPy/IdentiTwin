@@ -88,20 +88,22 @@ def create_dashboard(system_monitor):
          Input('lvdt-selector', 'value')]
     )
     def update_lvdt_graph(n, selected_lvdts):
-        # Get latest LVDT data from display buffer
         if not system_monitor.display_buffer or 'lvdt_data' not in system_monitor.display_buffer:
             return go.Figure()
 
         lvdt_data = system_monitor.display_buffer['lvdt_data']
-        
         fig = go.Figure()
         
-        # Check if 'all' is selected or if there are no selections
-        show_all = 'all' in selected_lvdts if isinstance(selected_lvdts, list) else selected_lvdts == 'all'
-        selected_indices = [int(i) for i in selected_lvdts if i != 'all'] if isinstance(selected_lvdts, list) else []
+        # Mejorada la lógica de selección
+        if selected_lvdts is None:
+            selected_lvdts = ['all']
+        elif not isinstance(selected_lvdts, list):
+            selected_lvdts = [selected_lvdts]
+            
+        show_all = 'all' in selected_lvdts
+        selected_indices = [int(i) for i in selected_lvdts if i != 'all']
         
         for i, lvdt in enumerate(lvdt_data):
-            # Skip if this LVDT is not selected
             if not show_all and i not in selected_indices:
                 continue
                 
@@ -169,44 +171,47 @@ def create_dashboard(system_monitor):
          Input('acc-selector', 'value')]
     )
     def update_acceleration_graph(n, selected_accs):
-        # Get latest Acceleration data from display buffer
         if not system_monitor.display_buffer or 'accel_data' not in system_monitor.display_buffer:
             return go.Figure()
 
         accel_data = system_monitor.display_buffer['accel_data']
-        
         fig = go.Figure()
         
-        # Check if 'all' is selected or if there are no selections
-        show_all = 'all' in selected_accs if isinstance(selected_accs, list) else selected_accs == 'all'
-        selected_indices = [int(i) for i in selected_accs if i != 'all'] if isinstance(selected_accs, list) else []
+        # Actualizar todos los historiales primero
+        current_time = max([hist['x'][-1] if hist['x'] else 0 for hist in ACC_HISTORY.values()], default=0)
+        DT = 1.0/system_monitor.config.plot_refresh_rate
+        new_time = current_time + DT
         
+        # Actualizar historiales para todos los sensores
         for i, acc in enumerate(accel_data):
-            # Skip if this accelerometer is not selected
-            if not show_all and i not in selected_indices:
-                continue
-                
-            # Get magnitude value
-            acceleration = acc.get('magnitude', 0)
+            if i not in ACC_HISTORY:
+                ACC_HISTORY[i] = {'x': [], 'y': []}
             
-            # accumulate history using update rate
-            hist = ACC_HISTORY.setdefault(i, {'x': [], 'y': []})
-            DT = 1.0/system_monitor.config.plot_refresh_rate
-            t = hist['x'][-1] + DT if hist['x'] else 0.0
+            ACC_HISTORY[i]['x'].append(new_time)
+            ACC_HISTORY[i]['y'].append(acc.get('magnitude', 0))
+            
+            ACC_HISTORY[i]['x'] = ACC_HISTORY[i]['x'][-MAX_POINTS:]
+            ACC_HISTORY[i]['y'] = ACC_HISTORY[i]['y'][-MAX_POINTS:]
 
-            hist['x'].append(t)
-            hist['y'].append(acceleration)
-            # trim to fixed window
-            hist['x'] = hist['x'][-MAX_POINTS:]
-            hist['y'] = hist['y'][-MAX_POINTS:]
+        # Determinar qué sensores mostrar
+        if selected_accs is None:
+            selected_accs = ['all']
+        elif not isinstance(selected_accs, list):
+            selected_accs = [selected_accs]
             
-            # Use custom colors for sensor lines
-            fig.add_trace(go.Scatter(
-                x=hist['x'], y=hist['y'],
-                mode='lines',
-                line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
-                name=f'ACC {i+1}'
-            ))
+        show_all = 'all' in selected_accs
+        selected_indices = [int(i) for i in selected_accs if i != 'all']
+        
+        # Añadir solo los sensores seleccionados al gráfico
+        for i in ACC_HISTORY:
+            if show_all or i in selected_indices:
+                fig.add_trace(go.Scatter(
+                    x=ACC_HISTORY[i]['x'], 
+                    y=ACC_HISTORY[i]['y'],
+                    mode='lines',
+                    line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
+                    name=f'ACC {i+1}'
+                ))
         
         # Calculate offset for relative time display
         offset = 0

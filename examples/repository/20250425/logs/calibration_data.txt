@@ -1,0 +1,28 @@
+Calibration Data - 2025-04-25 22:41:51
+--------------------------------------------------
+
+Accelerometer Calibration:
+------------------------
+Accelerometer-1:
+  X-offset: 0.000034 m/s^2
+  Y-offset: -0.000426 m/s^2
+  Z-offset: -9.809988 m/s^2
+Accelerometer-2:
+  X-offset: 0.000020 m/s^2
+  Y-offset: -0.000433 m/s^2
+  Z-offset: -9.809990 m/s^2
+
+--------------------------------------------------
+
+Calibration Data - 2025-04-25 22:41:47
+--------------------------------------------------
+
+LVDT Calibration:
+-----------------
+LVDT-1:
+  Slope: 19.860000 mm/V
+  Intercept: 0.091087 mm
+LVDT-2:
+  Slope: 21.860000 mm/V
+  Intercept: 0.078687 mm
+
