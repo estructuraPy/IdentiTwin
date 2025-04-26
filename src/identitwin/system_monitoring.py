@@ -176,7 +176,7 @@ class MonitoringSystem:
                     )
                     if accel_offsets:
                         self.config.accel_offsets = accel_offsets
-                        print("Accelerometer calibration complete.")
+                        print("Accelerometer calibration complete.\n\n")
                     else:
                         print("Accelerometer calibration failed.")
                 else:
