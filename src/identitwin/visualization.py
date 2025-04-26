@@ -13,7 +13,7 @@ import random
 import time                               # added
 from collections import deque            # added
 import numpy as np
-from scipy.fft import fft, fftfreq
+from .processing_analysis import calculate_fft
 
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
@@ -353,8 +353,6 @@ def create_dashboard(system_monitor):
 
             # preparar figura
             fig = go.Figure()
-            freqs = fftfreq(FFT_BUFFER_SIZE, 1.0/system_monitor.config.sampling_rate_acceleration)[:FFT_BUFFER_SIZE//2]
-            window = np.hanning(FFT_BUFFER_SIZE)
 
             # normalizar selección de componentes
             # component filtering: only x, y, z
@@ -365,15 +363,22 @@ def create_dashboard(system_monitor):
 
             for i, bufs in FFT_BUFFERS.items():
                 if show_all or i in sel_idxs:
+                    # build full XYZ arrays once
+                    data_x = np.array(bufs.get('x', []))
+                    data_y = np.array(bufs.get('y', []))
+                    data_z = np.array(bufs.get('z', []))
+                    if not all(len(arr) == FFT_BUFFER_SIZE for arr in (data_x, data_y, data_z)):
+                        continue
+                    freq, fft_x, fft_y, fft_z = calculate_fft(
+                        {'x': data_x, 'y': data_y, 'z': data_z},
+                        system_monitor.config.sampling_rate_acceleration
+                    )
                     for comp in comps:
-                        data = np.array(bufs.get(comp, []))
-                        if len(data) != FFT_BUFFER_SIZE:
-                            continue
-                        spec = np.abs(fft(data * window))[:FFT_BUFFER_SIZE//2]
+                        spec = {'x': fft_x, 'y': fft_y, 'z': fft_z}[comp]
                         base_color = COMPONENT_COLORS[comp]
                         color = _shade_color(base_color, dark=(i % 2 == 1))
                         fig.add_trace(go.Scatter(
-                            x=freqs, y=spec,
+                            x=freq, y=spec,
                             name=f'ACC {i+1} {comp.upper()}',
                             line={'color': color}
                         ))
@@ -383,9 +388,9 @@ def create_dashboard(system_monitor):
                 xaxis={
                     'title':'Frequency (Hz)',
                     'color': PALETTE[3],
-                    'range': [0.5, float(freqs.max())]
+                    'range': [0.5, float(freq.max())]
                 },
-                yaxis={'title':'Amplitud', 'color': PALETTE[3]},
+                yaxis={'title':'Amplitude', 'color': PALETTE[3]},
                 paper_bgcolor=PALETTE[2],
                 plot_bgcolor=PALETTE[2],
                 font={'color':PALETTE[3]},
