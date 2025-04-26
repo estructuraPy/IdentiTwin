@@ -47,8 +47,8 @@ from identitwin.calibration import calibrate_lvdt_channels
 
 # Default values for sampling rates and thresholds.
 ACCEL_SAMPLING_RATE = 100.0  # Hz
-LVDT_SAMPLING_RATE = 10.0  # Hz
-PLOT_REFRESH_RATE = 10.0  # Hz
+LVDT_SAMPLING_RATE = 20.0  # Hz
+PLOT_REFRESH_RATE = 5.0  # Hz
 WINDOW_DURATION = 15.0  # seconds for relative time window in plots
 
 NUM_LVDTS = 2
