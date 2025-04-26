@@ -75,7 +75,7 @@ enable_accel = True
 enable_plots = True
 enable_plot_displacement = True
 enable_accel_plots = True
-enable_fft_plots = False
+enable_fft_plots = True
 
 
 def print_banner():

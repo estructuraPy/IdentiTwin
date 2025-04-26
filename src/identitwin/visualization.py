@@ -12,6 +12,8 @@ import plotly.io as pio
 import random
 import time                               # added
 from collections import deque            # added
+import numpy as np
+from scipy.fft import fft, fftfreq
 
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
@@ -22,6 +24,13 @@ PALETTE = ['#C6203E', '#00217E', '#BCBEC0', '#000000']
 LVDT_HISTORY = {}
 ACC_HISTORY = {}          
 MAX_POINTS = 1000        
+# Añadir buffer FFT potencia de 2
+FFT_BUFFER_SIZE = 1024  # potencia de 2 >= muestras necesarias
+FFT_BUFFERS = {
+    'x': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
+    'y': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE),
+    'z': deque([0.0]*FFT_BUFFER_SIZE, maxlen=FFT_BUFFER_SIZE)
+}
 
 # Real‐time sampling buffers
 LVDT_BUFFER = {}     # sensor_index -> deque of (t, displacement)
@@ -316,9 +325,31 @@ def create_dashboard(system_monitor):
             [Input('interval-component', 'n_intervals')]
         )
         def update_fft_graph(n):
-            # Dummy FFT handling - replace with your FFT processing as needed.
-            # For example, you could perform FFT on one of the sensor data arrays.
-            return go.Figure()
+            # usar buffers prellenados
+            data_x = np.array(FFT_BUFFERS['x'])
+            data_y = np.array(FFT_BUFFERS['y'])
+            data_z = np.array(FFT_BUFFERS['z'])
+            # ventana Hanning
+            w = np.hanning(len(data_x))
+            xw, yw, zw = data_x*w, data_y*w, data_z*w
+            # FFT
+            fx, fy, fz = np.abs(fft(xw)), np.abs(fft(yw)), np.abs(fft(zw))
+            # frecuencias
+            dt = 1.0 / system_monitor.config.sampling_rate_acceleration
+            freqs = fftfreq(FFT_BUFFER_SIZE, dt)
+            n2 = len(freqs)//2
+            # construir figura
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=freqs[:n2], y=fx[:n2], name='X', line={'color': COMPONENT_COLORS['x']}))
+            fig.add_trace(go.Scatter(x=freqs[:n2], y=fy[:n2], name='Y', line={'color': COMPONENT_COLORS['y']}))
+            fig.add_trace(go.Scatter(x=freqs[:n2], y=fz[:n2], name='Z', line={'color': COMPONENT_COLORS['z']}))
+            fig.update_layout(
+                title='FFT Acelerómetro 1',
+                xaxis={'title':'Frecuencia (Hz)'}, yaxis={'title':'Amplitud'},
+                paper_bgcolor=PALETTE[2], plot_bgcolor=PALETTE[2], font={'color': PALETTE[3]},
+                height=500, margin={'l':40,'r':40,'t':80,'b':40}, showlegend=True
+            )
+            return fig
     
     return app
 
@@ -366,7 +397,6 @@ def run_dashboard(system_monitor):
                 for i, s in enumerate(data):
                     if i not in buf:
                         buf[i] = deque(maxlen=MAX_POINTS)
-                    # store time, magnitude, x, y, z
                     buf[i].append((
                         t,
                         s.get('magnitude', 0),
@@ -374,6 +404,11 @@ def run_dashboard(system_monitor):
                         s.get('y', 0),
                         s.get('z', 0)
                     ))
+                    # actualizar FFT buffer solo para el sensor 0
+                    if i == 0:
+                        FFT_BUFFERS['x'].append(s.get('x', 0))
+                        FFT_BUFFERS['y'].append(s.get('y', 0))
+                        FFT_BUFFERS['z'].append(s.get('z', 0))
                 _t.sleep(period)
 
         threading.Thread(target=lvdt_sampler, daemon=True).start()
