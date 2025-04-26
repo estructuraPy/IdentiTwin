@@ -203,10 +203,26 @@ def run_dashboard(system_monitor):
     
     def run():
         import logging
+        import socket
+        
+        # Configure logging for better error feedback
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
-        app.run(debug=False, host='0.0.0.0', port=8050)
+        
+        # Get local IP address for better connection info
+        try:
+            hostname = socket.gethostname()
+            local_ip = socket.gethostbyname(hostname)
+            print(f"\nDashboard starting on host: {hostname} ({local_ip})")
+            print(f"Access locally at: http://localhost:8050")
+            print(f"Access from other devices at: http://{local_ip}:8050\n")
+            
+            # Start the server with specific host binding
+            # Using '0.0.0.0' to listen on all network interfaces
+            app.run(debug=False, host='0.0.0.0', port=8050)
+        except Exception as e:
+            print(f"ERROR starting dashboard: {e}")
+            print("Try accessing the dashboard at http://127.0.0.1:8050 instead \n")
     
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
-    print("Dashboard started at http://localhost:8050")
     return thread
