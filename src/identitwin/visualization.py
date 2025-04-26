@@ -9,6 +9,7 @@ from dash.dependencies import Input, Output
 import plotly.graph_objects as go
 import threading
 import plotly.io as pio
+import random
 
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
@@ -20,7 +21,12 @@ LVDT_HISTORY = {}
 ACC_HISTORY = {}          
 MAX_POINTS = 1000        
 
-
+# Custom color set for sensor lines - distinct from PALETTE
+SENSOR_COLORS = [
+    '#FF5733', '#33FF57', '#3357FF', '#FF33A8', 
+    '#33FFF5', '#F533FF', '#FF8C33', '#8CFF33', 
+    '#338CFF', '#FF338C', '#33FFC4', '#C433FF'
+]
 
 def create_dashboard(system_monitor):
     """Create and configure the Dash application."""
@@ -30,17 +36,41 @@ def create_dashboard(system_monitor):
         html.H1("IdentiTwin Real-Time Monitoring",
                 style={'textAlign': 'center', 'color': PALETTE[0]}),
 
-        # Gráfico de desplazamientos LVDT
+        # LVDT section with dropdown selector
         html.Div([
             html.H3("LVDT Displacements", 
-                   style={'textAlign': 'center', 'color': PALETTE[1]}),
+                    style={'textAlign': 'center', 'color': PALETTE[1]}),
+            html.Div([
+                html.Label("Select LVDT:"),
+                dcc.Dropdown(
+                    id='lvdt-selector',
+                    options=[{'label': 'All', 'value': 'all'}] +
+                            [{'label': f'LVDT {i+1}', 'value': str(i)} 
+                             for i in range(system_monitor.config.num_lvdts)],
+                    value='all',
+                    multi=True,
+                    style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                ),
+            ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
             dcc.Graph(id='lvdt-plot'),
         ]) if system_monitor.config.enable_plot_displacement else None,
         
-        # Nuevo gráfico de aceleraciones
+        # Acceleration section with dropdown selector
         html.Div([
             html.H3("Accelerations", 
-                   style={'textAlign': 'center', 'color': PALETTE[1]}),
+                    style={'textAlign': 'center', 'color': PALETTE[1]}),
+            html.Div([
+                html.Label("Select Accelerometer:"),
+                dcc.Dropdown(
+                    id='acc-selector',
+                    options=[{'label': 'All', 'value': 'all'}] +
+                            [{'label': f'ACC {i+1}', 'value': str(i)} 
+                             for i in range(system_monitor.config.num_accelerometers)],
+                    value='all',
+                    multi=True,
+                    style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                ),
+            ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '20px'}),
             dcc.Graph(id='acceleration-plot'),
         ]) if system_monitor.config.enable_plot_displacement else None,
         
@@ -54,9 +84,10 @@ def create_dashboard(system_monitor):
 
     @app.callback(
         Output('lvdt-plot', 'figure'),
-        Input('interval-component', 'n_intervals')
+        [Input('interval-component', 'n_intervals'),
+         Input('lvdt-selector', 'value')]
     )
-    def update_lvdt_graph(n):
+    def update_lvdt_graph(n, selected_lvdts):
         # Get latest LVDT data from display buffer
         if not system_monitor.display_buffer or 'lvdt_data' not in system_monitor.display_buffer:
             return go.Figure()
@@ -64,7 +95,16 @@ def create_dashboard(system_monitor):
         lvdt_data = system_monitor.display_buffer['lvdt_data']
         
         fig = go.Figure()
+        
+        # Check if 'all' is selected or if there are no selections
+        show_all = 'all' in selected_lvdts if isinstance(selected_lvdts, list) else selected_lvdts == 'all'
+        selected_indices = [int(i) for i in selected_lvdts if i != 'all'] if isinstance(selected_lvdts, list) else []
+        
         for i, lvdt in enumerate(lvdt_data):
+            # Skip if this LVDT is not selected
+            if not show_all and i not in selected_indices:
+                continue
+                
             displacement = lvdt.get('displacement', 0)
             
             # accumulate history using update rate
@@ -78,15 +118,15 @@ def create_dashboard(system_monitor):
             hist['x'] = hist['x'][-MAX_POINTS:]
             hist['y'] = hist['y'][-MAX_POINTS:]
             
-            # scatter line using absolute time (will be shifted later)
+            # Use custom colors for sensor lines
             fig.add_trace(go.Scatter(
                 x=hist['x'], y=hist['y'],
                 mode='lines',
-                line={'color': PALETTE[i % len(PALETTE)]},
+                line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
                 name=f'LVDT {i+1}'
             ))
         
-        # Calcular offset para presentar tiempos relativos (ventana de 10 s)
+        # Calculate offset for relative time display
         offset = 0
         for sensor in LVDT_HISTORY.values():
             if sensor['x']:
@@ -94,11 +134,11 @@ def create_dashboard(system_monitor):
                 offset = t_end - system_monitor.config.window_duration if t_end >= system_monitor.config.window_duration else 0
                 break
         xr = [0, system_monitor.config.window_duration]
-        # Ajustar los datos de cada traza para que muestren tiempos relativos
+        # Adjust each trace to show relative times
         for trace in fig.data:
             trace.x = [x - offset for x in trace.x]
         
-        # Calcular rango dinámico para el eje Y de desplazamientos
+        # Calculate dynamic range for Y axis
         y_vals = []
         for trace in fig.data:
             y_vals.extend(trace.y)
@@ -125,9 +165,10 @@ def create_dashboard(system_monitor):
 
     @app.callback(
         Output('acceleration-plot', 'figure'),
-        Input('interval-component', 'n_intervals')
+        [Input('interval-component', 'n_intervals'),
+         Input('acc-selector', 'value')]
     )
-    def update_acceleration_graph(n):
+    def update_acceleration_graph(n, selected_accs):
         # Get latest Acceleration data from display buffer
         if not system_monitor.display_buffer or 'accel_data' not in system_monitor.display_buffer:
             return go.Figure()
@@ -135,8 +176,17 @@ def create_dashboard(system_monitor):
         accel_data = system_monitor.display_buffer['accel_data']
         
         fig = go.Figure()
+        
+        # Check if 'all' is selected or if there are no selections
+        show_all = 'all' in selected_accs if isinstance(selected_accs, list) else selected_accs == 'all'
+        selected_indices = [int(i) for i in selected_accs if i != 'all'] if isinstance(selected_accs, list) else []
+        
         for i, acc in enumerate(accel_data):
-            # Reemplaza 'acceleration' por 'magnitude'
+            # Skip if this accelerometer is not selected
+            if not show_all and i not in selected_indices:
+                continue
+                
+            # Get magnitude value
             acceleration = acc.get('magnitude', 0)
             
             # accumulate history using update rate
@@ -150,15 +200,15 @@ def create_dashboard(system_monitor):
             hist['x'] = hist['x'][-MAX_POINTS:]
             hist['y'] = hist['y'][-MAX_POINTS:]
             
-            # scatter line using absolute time (will be shifted later)
+            # Use custom colors for sensor lines
             fig.add_trace(go.Scatter(
                 x=hist['x'], y=hist['y'],
                 mode='lines',
-                line={'color': PALETTE[i % len(PALETTE)]},
+                line={'color': SENSOR_COLORS[i % len(SENSOR_COLORS)]},
                 name=f'ACC {i+1}'
             ))
         
-        #
+        # Calculate offset for relative time display
         offset = 0
         for sensor in ACC_HISTORY.values():
             if sensor['x']:
@@ -170,7 +220,7 @@ def create_dashboard(system_monitor):
         for trace in fig.data:
             trace.x = [x - offset for x in trace.x]
         
-        # Calcular rango dinámico para el eje Y de aceleraciones
+        # Calculate dynamic range for Y axis
         y_vals = []
         for trace in fig.data:
             y_vals.extend(trace.y)
