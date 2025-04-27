@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.65"
+version = "0.0.66"
 description = "A Tool to setup a Raspberri Pi for SHM with accelerations or displacements or both"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
@@ -30,6 +30,11 @@ dependencies = [
     "pyserial>=3.5",
     "pandas>=2.2.3",
     "scipy>=1.12.0",
+    "sphinx>=7.1.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-autodoc-typehints>=1.25.2",
+    "myst-parser>=2.0.0",
+    "sphinx-autoapi>=3.0.0"
 ]
 
 [tool.setuptools]

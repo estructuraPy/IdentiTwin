@@ -41,6 +41,10 @@ IdentiTwin is developed under the project ``Gemelo digital como herramienta de g
 
 ## Installation
 
+```bash
+pip install identitwin
+```
+
 ### Prerequisites
 - Raspberry Pi (tested on Raspberry Pi 5) with Raspberry Pi OS (or compatible Linux distribution).
 - Python 3.8+
@@ -141,6 +145,8 @@ IdentiTwin is developed under the project ``Gemelo digital como herramienta de g
     *(Or use the `--simulation` flag explicitly: `python initialization.py --simulation`)*
 
 ## Documentation
+
+Full documentation is available at [Read the Docs](https://identitwin.readthedocs.io/).
 
 Further details on configuration options, data formats, and analysis interpretation can be found in the project's technical documentation (link to be added).
 
