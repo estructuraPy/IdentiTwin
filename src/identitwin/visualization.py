@@ -277,7 +277,7 @@ def create_dashboard(system_monitor):
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Displacement', 'range': dyn_y_range, 'color': PALETTE[3]},
-            height=400,
+            height=300,
             margin=dict(l=40, r=40, t=60, b=40),
             paper_bgcolor=PALETTE[2],
             plot_bgcolor=PALETTE[2],
@@ -365,7 +365,7 @@ def create_dashboard(system_monitor):
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Acceleration', 'range': dyn_y_range, 'color': PALETTE[3]},
-            height=400,
+            height=300,
             margin=dict(l=40, r=40, t=60, b=40),
             paper_bgcolor=PALETTE[2],
             plot_bgcolor=PALETTE[2],
@@ -441,7 +441,7 @@ def create_dashboard(system_monitor):
                 paper_bgcolor=PALETTE[2],
                 plot_bgcolor=PALETTE[2],
                 font={'color':PALETTE[3]},
-                height=400,
+                height=300,
                 margin={'l':40,'r':40,'t':80,'b':40},
                 showlegend=True
             )
