@@ -12,7 +12,7 @@ project = 'IdentiTwin'
 copyright = '2025, Instituto Tecnológico de Costa Rica'
 authors = ['Angel Navarro-Mora', 'Alvaro Perez-Mora']
 author = ', '.join(authors)
-release = '0.0.1'
+release = '0.1.0'
 
 # -- General configuration ---------------------------------------------------
 
