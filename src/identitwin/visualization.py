@@ -100,7 +100,10 @@ def create_dashboard(system_monitor):
                 default_tab = tab_value
             tabs_children.append(dcc.Tab(label='Displacements', value=tab_value, children=[
                 _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
-                dcc.Dropdown(
+                html.H3("Displacements", style={'textAlign': 'left', 'color': PALETTE[1]}),
+                html.Div([
+                    html.Label("Select LVDT:"),
+                    dcc.Dropdown(
                     id='lvdt-selector',
                     options=[{'label': 'All', 'value': 'all'}] +
                             [{'label': f'LVDT {i+1}', 'value': str(i)} 
@@ -109,6 +112,7 @@ def create_dashboard(system_monitor):
                     multi=True,
                     style={'color': 'black', 'backgroundColor': PALETTE[2]}
                 ),
+                ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),                
                 dcc.Graph(id='lvdt-plot') # Keep original graph ID
             ]))
 
@@ -118,7 +122,7 @@ def create_dashboard(system_monitor):
                 default_tab = tab_value
             tabs_children.append(dcc.Tab(label='Accelerations', value=tab_value, children=[
                 _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
-                html.H3("Accelerations", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                html.H3("Accelerations", style={'textAlign': 'left', 'color': PALETTE[1]}),
                 html.Div([
                     html.Label("Select Accelerometer:"),
                     dcc.Dropdown(
@@ -156,7 +160,7 @@ def create_dashboard(system_monitor):
                 default_tab = tab_value
             tabs_children.append(dcc.Tab(label='FFT Analysis', value=tab_value, children=[
                 _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
-                html.H3("FFT Analysis", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                html.H3("FFT Analysis", style={'textAlign': 'Left', 'color': PALETTE[1]}),
                 html.Div([
                     html.Label("Select Accelerometer:"),
                     dcc.Dropdown(
