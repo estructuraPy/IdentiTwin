@@ -22,7 +22,7 @@ Provides functions to:
 """
 
 
-def initialize_lvdt(channels: list[object], slopes: list[float] = None, config: object = None) -> List[Optional[Dict]]:
+def initialize_lvdt(channels: List[object], slopes: List[float] = None, config: object = None) -> List[Optional[Dict]]:
     """Initializes LVDT sensors and determines zero-point intercepts.
 
     Reads the initial voltage from each LVDT channel and calculates the
@@ -32,9 +32,9 @@ def initialize_lvdt(channels: list[object], slopes: list[float] = None, config: 
     to a log file.
 
     Args:
-        channels (list[object]): A list of LVDT channel objects (e.g., `AnalogIn`).
+        channels (List[object]): A list of LVDT channel objects (e.g., `AnalogIn`).
             Each object must have a readable `voltage` attribute.
-        slopes (list[float], optional): A list of sensitivity slopes (e.g., mm/V)
+        slopes (List[float], optional): A list of sensitivity slopes (e.g., mm/V)
             corresponding to each LVDT channel. Must be provided if `config` is None
             or doesn't contain slopes. Defaults to None.
         config (object, optional): The system configuration object. If provided,
@@ -159,7 +159,7 @@ def zeroing_lvdt(channel: object, slope: float, label: str = "LVDT") -> Dict:
     return {'lvdt_slope': slope, 'lvdt_intercept': intercept}
 
 
-def multiple_accelerometers(mpu_list: list[object], calibration_time: float = 2.0, config: object = None) -> List[Optional[Dict]]:
+def multiple_accelerometers(mpu_list: List[object], calibration_time: float = 2.0, config: object = None) -> List[Optional[Dict]]:
     """Calibrates multiple accelerometers by calculating bias offsets.
 
     Assumes sensors are stationary. Collects data for `calibration_time`,
@@ -168,7 +168,7 @@ def multiple_accelerometers(mpu_list: list[object], calibration_time: float = 2.
     in the `config` object if provided and saves them to a log file.
 
     Args:
-        mpu_list (list[object]): A list of MPU (accelerometer) objects. Each must
+        mpu_list (List[object]): A list of MPU (accelerometer) objects. Each must
             have a `get_accel_data()` method returning {'x', 'y', 'z'}.
         calibration_time (float, optional): Duration (seconds) to collect data
             for averaging. Defaults to 2.0.
