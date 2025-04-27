@@ -12,3 +12,14 @@ sphinx-rtd-theme>=2.0.0
 sphinx-autodoc-typehints>=1.25.2
 myst-parser>=2.0.0
 sphinx-autoapi>=3.0.0
+
+# Core and optional performance dependencies
+numpy
+matplotlib
+colorama
+psutil
+# Hardware specific (optional, add if needed for documentation build on target):
+# gpiozero
+# adafruit-circuitpython-ads1x15
+# adafruit-blinka
+# mpu6050-raspberrypi

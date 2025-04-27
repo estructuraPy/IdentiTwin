@@ -1,53 +1,32 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "identitwin"
 version = "0.0.66"
-description = "A Tool to setup a Raspberri Pi for SHM with accelerations or displacements or both"
-authors = [
-    { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
-    { name = "Alvaro Perez-Mora", email = "alvaroenrique2001@estudiantec.cr" }
-]
-license = { text = "MIT" }
-readme = "README.md"
-requires-python = ">=3.8"
-dependencies = [
-    "numpy>=1.24.0",
-    "matplotlib>=3.7.1",
-    "pandas>=2.0.0",
-    "scipy>=1.10.0",
-    "tqdm>=4.62.0",
-    "pyserial>=3.5"
-]
+description = "Digital Twin system for structural monitoring."
+authors = ["Your Name <you@example.com>"] # Replace with actual author info
+readme = "README.md" # Assuming you have a README.md
 
-[project.optional-dependencies]
-raspberry = [
-    "gpiozero>=2.0",
-    "RPi.GPIO>=0.7.1",
-    "lgpio>=0.2.2.0",
-    "smbus>=1.1.post2",
-    "adafruit-circuitpython-ads1x15>=2.4.2",
-    "mpu6050-raspberrypi>=1.2",
-    "Adafruit-Blinka>=8.56.0",
-    "adafruit-circuitpython-busdevice>=5.2.11",
-    "adafruit-circuitpython-register>=1.10.2",
-    "Adafruit-PlatformDetect>=3.77.0",
-    "Adafruit-PureIO>=1.1.11"
-]
+[tool.poetry.dependencies]
+python = "^3.8" # Specify compatible Python versions
+numpy = "*"
+matplotlib = "*"
+colorama = "*"
 
-docs = [
-    "sphinx>=7.1.0",
-    "sphinx-rtd-theme>=2.0.0",
-    "sphinx-autodoc-typehints>=1.25.2",
-    "myst-parser>=2.0.0",
-    "sphinx-autoapi>=3.0.0"
-]
+# Optional dependencies defined as extras
+psutil = { version = "*", optional = true }
+gpiozero = { version = "*", optional = true }
+adafruit-circuitpython-ads1x15 = { version = "*", optional = true }
+adafruit-blinka = { version = "*", optional = true } # Required by Adafruit libraries on Linux
+mpu6050-raspberrypi = { version = "*", optional = true }
 
-[tool.setuptools]
-packages = ["identitwin"]
-package-dir = {"" = "src"}
 
-[tool.setuptools.package-data]
-identitwin = ["tests/*.py"]
+[tool.poetry.extras]
+performance = ["psutil"]
+hardware = ["gpiozero", "adafruit-circuitpython-ads1x15", "adafruit-blinka", "mpu6050-raspberrypi"]
+all = ["psutil", "gpiozero", "adafruit-circuitpython-ads1x15", "adafruit-blinka", "mpu6050-raspberrypi"]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Add other sections as needed, e.g., [tool.poetry.dev-dependencies] for testing tools
