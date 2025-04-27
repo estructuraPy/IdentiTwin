@@ -260,6 +260,16 @@ def create_dashboard(system_monitor):
         else:
             dyn_y_range = [-50, 50]
         
+        # Add trigger and detrigger lines
+        if hasattr(system_monitor.config, 'trigger_displacement_threshold'):
+            trigger_threshold_disp = system_monitor.config.trigger_displacement_threshold
+            fig.add_trace(go.Scatter(x=xr, y=[trigger_threshold_disp, trigger_threshold_disp], mode='lines', line=dict(color='orange', dash='dash'), name='Trigger'))
+            fig.add_trace(go.Scatter(x=xr, y=[-trigger_threshold_disp, -trigger_threshold_disp], mode='lines', line=dict(color='orange', dash='dash'), name='Trigger'))
+        if hasattr(system_monitor.config, 'detrigger_displacement_threshold'):
+            detrigger_threshold_disp = system_monitor.config.detrigger_displacement_threshold
+            fig.add_trace(go.Scatter(x=xr, y=[detrigger_threshold_disp, detrigger_threshold_disp], mode='lines', line=dict(color='purple', dash='dash'), name='Detrigger'))
+            fig.add_trace(go.Scatter(x=xr, y=[-detrigger_threshold_disp, -detrigger_threshold_disp], mode='lines', line=dict(color='purple', dash='dash'), name='Detrigger'))
+
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Displacement', 'range': dyn_y_range, 'color': PALETTE[3]},
@@ -338,6 +348,16 @@ def create_dashboard(system_monitor):
         else:
             dyn_y_range = [-50, 50]
         
+        # Add trigger and detrigger lines
+        if hasattr(system_monitor.config, 'trigger_acceleration_threshold'):
+            trigger_threshold_accel = system_monitor.config.trigger_acceleration_threshold
+            fig.add_trace(go.Scatter(x=xr, y=[trigger_threshold_accel, trigger_threshold_accel], mode='lines', line=dict(color='orange', dash='dash'), name='Trigger'))
+            fig.add_trace(go.Scatter(x=xr, y=[-trigger_threshold_accel, -trigger_threshold_accel], mode='lines', line=dict(color='orange', dash='dash'), name='Trigger'))
+        if hasattr(system_monitor.config, 'detrigger_acceleration_threshold'):
+            detrigger_threshold_accel = system_monitor.config.detrigger_acceleration_threshold
+            fig.add_trace(go.Scatter(x=xr, y=[detrigger_threshold_accel, detrigger_threshold_accel], mode='lines', line=dict(color='purple', dash='dash'), name='Detrigger'))
+            fig.add_trace(go.Scatter(x=xr, y=[-detrigger_threshold_accel, -detrigger_threshold_accel], mode='lines', line=dict(color='purple', dash='dash'), name='Detrigger'))
+
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Acceleration', 'range': dyn_y_range, 'color': PALETTE[3]},
