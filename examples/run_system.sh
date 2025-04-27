@@ -1,11 +1,10 @@
 #!/bin/bash
 
-echo "Using Conda environment..."
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate identitwin
+echo "Using Python virtual environment..."
+source ../setup_env/venv/bin/activate
 
-echo "Running Identitwin System in simulation mode..."
-python initialization.py --simulation
+echo "Running Identitwin System in hardware mode..."
+python initialization.py
 
 # No need for pause in Linux, but you can add this if you want to keep the terminal open
 read -p "Press Enter to continue..."
