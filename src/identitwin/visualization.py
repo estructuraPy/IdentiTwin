@@ -449,16 +449,16 @@ def create_dashboard(system_monitor):
         style = LED_STYLE_OFF # Default to OFF
 
         if is_recording:
-            blink_cycle_duration = 0.75  # 0.5s ON + 0.25s OFF
-            blink_on_duration = 0.5
+            blink_cycle_duration = 0.7
+            blink_on_duration = 0.3
             current_time = time.time()
             time_in_cycle = current_time % blink_cycle_duration
             if time_in_cycle < blink_on_duration:
-                style = LED_STYLE_RECORDING_ON # ON style if in the first 0.5s
+                style = LED_STYLE_RECORDING_ON 
             else:
-                style = LED_STYLE_OFF # OFF style if in the last 0.25s
+                style = LED_STYLE_OFF
         else:
-            style = LED_STYLE_OFF # OFF if not recording
+            style = LED_STYLE_OFF
 
         # Return a list of styles, one for each matched LED
         # Check if callback_context is available
@@ -466,7 +466,6 @@ def create_dashboard(system_monitor):
         if dash.callback_context.outputs_list:
              num_leds = len(dash.callback_context.outputs_list)
         return [style] * num_leds
-    # --- End Modified Callbacks ---
     
     return app
 
