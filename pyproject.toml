@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "identitwin"
-version = "0.0.58"
+version = "0.0.65"
 description = "A Tool to setup a Raspberri Pi for SHM with accelerations or displacements or both"
 authors = [
     { name = "Angel Navarro-Mora", email = "ahnavarro@itcr.ac.cr" },
