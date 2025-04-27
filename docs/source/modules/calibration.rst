@@ -9,13 +9,13 @@ Calibration
 Overview
 --------
 
-The ``calibration`` module provides functionality for calibrating and initializing sensors for the IdentiTwin system, specifically LVDT displacement sensors and MPU6050 accelerometers. It handles determining zero-point intercepts for LVDTs and calculating bias offsets for accelerometers.
+The ``calibration`` module provides functions for calibrating LVDT displacement sensors and MPU6050 accelerometers. It includes methods for determining LVDT intercepts and calculating accelerometer bias offsets.
 
 Key Features:
 ------------
 
-* LVDT initialization: Determines zero-point intercepts based on initial voltage and sensitivity slopes.
-* Accelerometer calibration: Calculates bias offsets assuming sensors are stationary.
-* Offset application: Provides functions to apply calculated offsets to raw accelerometer data.
-* Calibration logging: Saves LVDT intercepts and accelerometer offsets to a log file.
-* Configuration integration: Stores calibration parameters within the system configuration object.
+* LVDT initialization: Determines zero-point intercepts.
+* Accelerometer calibration: Calculates bias offsets (assumes stationary).
+* Offset application: Applies calculated offsets to raw accelerometer data.
+* Calibration logging: Saves calibration parameters to a log file.
+* Configuration integration: Stores parameters in the system configuration.

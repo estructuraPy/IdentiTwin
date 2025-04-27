@@ -8,7 +8,7 @@ Welcome to IdentiTwin's Documentation
    :align: center
    :width: 200px
 
-**IdentiTwin** is a Python library developed under the research project of the **Instituto Tecnológico Nacional de Costa Rica (ITCR)**, 
+**IdentiTwin** is a Python library developed under the research project of the **Instituto Tecnológico Nacional de Costa Rica (ITCR)**,
 called **Gemelo digital como herramienta de gestión del plan de conservación programada. Caso de estudio: foyer y fumadores del
 Teatro Nacional de Costa Rica**.
 
@@ -27,40 +27,52 @@ Project Information
 Core Modules
 -----------
 
-* **System Monitoring**: Real-time monitoring system with multi-threaded data acquisition
-* **Event Detection**: Automated detection and recording of structural events
-* **Data Processing**: Comprehensive signal processing and data management
-* **Analysis Tools**: Advanced analysis including FFT and statistical calculations
-* **Performance Monitoring**: System performance tracking and optimization
-* **Calibration**: Sensor calibration and initialization utilities
-* **Configuration**: System-wide configuration management
+* **Configuration (`configurator`)**: Manages system settings and hardware setup for Raspberry Pi.
+* **Calibration (`calibration`)**: Functions for LVDT and accelerometer calibration.
+* **Data Acquisition (`acquisition`)**: (Implied) Handles real-time sensor data reading.
+* **State Management (`state`)**: Provides thread-safe state variables.
+* **Event Monitoring (`event_monitoring`)**: Detects events based on sensor thresholds.
+* **Data Processing (`processing_data`)**: Processes and logs sensor data, extracts event data.
+* **Data Analysis (`processing_analysis`)**: Performs time/frequency analysis and generates plots/reports for events.
+* **Performance Monitoring (`performance_monitor`)**: Tracks acquisition timing and system resource usage.
+* **Report Generation (`report_generator`)**: Creates configuration and session summary reports.
+* **Visualization (`visualization`)**: (Implied/Future) Real-time data plotting.
+* **Simulation (`simulator`)**: Allows running without hardware.
 
 Key Features
 -----------
 
-* **Real-time Monitoring**:
-    - Multi-threaded data acquisition
-    - LVDT and accelerometer support
-    - Continuous performance tracking
-    - Event-based data recording
+* **Monitoring & Acquisition**:
+    - Multi-threaded data acquisition support (implied).
+    - Support for LVDT and MPU6050 sensors.
+    - Hardware detection for Raspberry Pi.
+    - Software simulation mode.
 
-* **Event Detection**:
-    - Configurable trigger thresholds
-    - Pre and post-event buffering
-    - Automatic event classification
-    - Data persistence
+* **Event Detection & Recording**:
+    - Configurable trigger/detrigger thresholds.
+    - Pre/post-event data buffering.
+    - Background saving and analysis of event data.
+    - Event-specific file organization.
 
-* **Signal Processing**:
-    - FFT analysis
-    - Statistical calculations
-    - Time-domain analysis
-    - Data validation and cleaning
+* **Calibration & Configuration**:
+    - LVDT zero-point calculation.
+    - Accelerometer bias offset calculation.
+    - Storage of calibration parameters.
+    - Centralized configuration management.
 
-* **System Management**:
-    - Hardware configuration
-    - Sensor calibration
-    - Performance optimization
-    - Status reporting
+* **Data Processing & Analysis**:
+    - Application of calibration parameters.
+    - Time-domain analysis (RMS, peak-to-peak).
+    - Frequency-domain analysis (FFT).
+    - Generation of plots (Matplotlib).
+    - Saving event data (CSV, NumPy).
+
+* **System Performance & Reporting**:
+    - Calculation of sampling rates and jitter.
+    - Optional CPU/memory monitoring (`psutil`).
+    - Performance metric logging.
+    - Generation of system and session reports.
+    - Detailed reports for detected events.
 
 Installation
 -----------
