@@ -7,12 +7,16 @@ readme = "README.md" # Assuming you have a README.md
 
 [tool.poetry.dependencies]
 python = "^3.8" # Specify compatible Python versions
+sphinx = "*"
+sphinx-autodoc-typehints = "*"
+sphinx-rtd-theme = "*"
 numpy = "*"
 matplotlib = "*"
 colorama = "*"
+psutil = "*"
+# Add other dependencies as needed
 
 # Optional dependencies defined as extras
-psutil = { version = "*", optional = true }
 gpiozero = { version = "*", optional = true }
 adafruit-circuitpython-ads1x15 = { version = "*", optional = true }
 adafruit-blinka = { version = "*", optional = true } # Required by Adafruit libraries on Linux
