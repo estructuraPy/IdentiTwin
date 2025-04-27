@@ -57,10 +57,10 @@ def initialize_lvdt(channels: list[object], slopes: list[float] = None, config: 
     print(f"\nInitializing {len(channels)} LVDT channels")
 
     if slopes is None:
-        raise ValueError("LVDT slopes must be provided.")
+        raise ValueError("LVDT slopes must be provided for calibration.")
 
     if len(slopes) < len(channels):
-        raise ValueError(f"Insufficient slopes provided. Need {len(channels)}, got {len(slopes)}.")
+        raise ValueError(f"Insufficient slopes: required {len(channels)}, got {len(slopes)}.")
 
     # Use only the required number of slopes if more are provided
     cal_slopes = slopes[:len(channels)]
@@ -80,7 +80,7 @@ def initialize_lvdt(channels: list[object], slopes: list[float] = None, config: 
                     break
                 except Exception as read_err:
                     attempts += 1
-                    print(f"   Attempt {attempts} to read {lvdt_label} failed: {read_err}")
+                    print(f"   Attempt {attempts} for {lvdt_label} failed: {read_err}")
                     time.sleep(0.1)
 
             if voltage is None:
@@ -91,7 +91,7 @@ def initialize_lvdt(channels: list[object], slopes: list[float] = None, config: 
             slope = cal_slopes[i]
             # Calculate intercept to zero the sensor at the current voltage
             intercept = -slope * voltage
-            print(f" - {lvdt_label} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+            print(f" - {lvdt_label}: slope={slope:.4f}, intercept={intercept:.4f} (voltage={voltage:.4f})")
 
             # Store calibration parameters
             # Includes alternative names for backward compatibility or different use cases.
@@ -148,7 +148,7 @@ def zeroing_lvdt(channel: object, slope: float, label: str = "LVDT") -> Dict:
     """
     voltage = channel.voltage
     intercept = -slope * voltage
-    print(f" - {label} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
+    print(f" - {label} zeroing: slope={slope:.4f}, intercept={intercept:.4f} (voltage={voltage:.4f})")
 
     # Update channel object directly (if supported by the object's design)
     # Potential Improvement: This direct attribute setting might violate
