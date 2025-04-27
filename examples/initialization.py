@@ -382,7 +382,6 @@ def main():
 
         print("\n================== Init data processing =====================\n")
         config.window_duration = WINDOW_DURATION  # seconds of data visible
-        monitor_system.initialize_processing()
 
         system_report_file = os.path.join(config.reports_dir, "system_report.txt")
         report_generator.generate_system_report(config, system_report_file)

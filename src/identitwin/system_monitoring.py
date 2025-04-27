@@ -189,43 +189,6 @@ class MonitoringSystem:
             traceback.print_exc()
             raise
 
-    def initialize_processing(self):
-        """
-        Initialize data processing and CSV file creation.
-        Creates CSV files and plot variables necessary for data storage and visualization.
-
-        Returns:
-            None
-
-        Assumptions:
-            - Configuration object is properly initialized and contains necessary parameters
-              such as output directory, number of LVDTs/accelerometers, sampling rates, etc.
-        """
-        self.csv_file_general = os.path.join(
-            self.config.output_dir, "general_measurements.csv"
-        )
-        processing_data.initialize_general_csv(
-            num_lvdts=self.config.num_lvdts if self.config.enable_lvdt else 0,
-            num_accelerometers=self.config.num_accelerometers
-            if self.config.enable_accel
-            else 0,
-            filename=self.csv_file_general,
-        )
-        if self.config.enable_lvdt:
-            self.csv_file_displacement = os.path.join(
-                self.config.output_dir, "displacements.csv"
-            )
-            processing_data.initialize_displacement_csv(
-                filename=self.csv_file_displacement
-            )
-        if self.config.enable_accel:
-            self.csv_file_acceleration = os.path.join(
-                self.config.output_dir, "acceleration.csv"
-            )
-            processing_data.initialize_acceleration_csv(
-                filename=self.csv_file_acceleration,
-                num_accelerometers=self.config.num_accelerometers,
-            )
 
     def start_monitoring(self):
         """

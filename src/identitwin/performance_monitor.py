@@ -48,6 +48,7 @@ class PerformanceMonitor:
         Assumptions:
             - The configuration object has attributes for sampling rates and jitter thresholds.
         """
+
         self.config = config
         self.log_file = log_file
 
