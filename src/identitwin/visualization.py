@@ -252,10 +252,12 @@ def create_dashboard(system_monitor):
         for trace in fig.data:
             trace.x = [x - offset for x in trace.x]
         
-        # Calculate dynamic range for Y axis
+        # Calculate dynamic range for Y axis using only currently visible points
         y_vals = []
         for trace in fig.data:
-            y_vals.extend(trace.y)
+            # Filter values where the corresponding x is in [0, window_duration]
+            filtered_y = [y for x, y in zip(trace.x, trace.y) if 0 <= x <= xr[1]]
+            y_vals.extend(filtered_y)
         if y_vals:
             y_min = min(y_vals)
             y_max = max(y_vals)
@@ -277,7 +279,7 @@ def create_dashboard(system_monitor):
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Displacement', 'range': dyn_y_range, 'color': PALETTE[3]},
-            height=300,
+            height=375,
             margin=dict(l=40, r=40, t=60, b=40),
             paper_bgcolor=PALETTE[2],
             plot_bgcolor=PALETTE[2],
@@ -340,10 +342,11 @@ def create_dashboard(system_monitor):
         for trace in fig.data:
             trace.x = [x - offset for x in trace.x]
         
-        # Calculate dynamic range for Y axis
+        # Calculate dynamic range for Y axis using only currently visible points
         y_vals = []
         for trace in fig.data:
-            y_vals.extend(trace.y)
+            filtered_y = [y for x, y in zip(trace.x, trace.y) if 0 <= x <= xr[1]]
+            y_vals.extend(filtered_y)
         if y_vals:
             y_min = min(y_vals)
             y_max = max(y_vals)
@@ -365,7 +368,7 @@ def create_dashboard(system_monitor):
         fig.update_layout(
             xaxis={'title': 'Time (s)', 'range': xr, 'color': PALETTE[3]},
             yaxis={'title': 'Acceleration', 'range': dyn_y_range, 'color': PALETTE[3]},
-            height=300,
+            height=375,
             margin=dict(l=40, r=40, t=60, b=40),
             paper_bgcolor=PALETTE[2],
             plot_bgcolor=PALETTE[2],
@@ -441,7 +444,7 @@ def create_dashboard(system_monitor):
                 paper_bgcolor=PALETTE[2],
                 plot_bgcolor=PALETTE[2],
                 font={'color':PALETTE[3]},
-                height=300,
+                height=375,
                 margin={'l':40,'r':40,'t':80,'b':40},
                 showlegend=True
             )
