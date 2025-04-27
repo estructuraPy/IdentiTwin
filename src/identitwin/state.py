@@ -25,11 +25,13 @@ import threading
 _sensor_state = {}
 _event_state = {}
 _config_state = {}
+_system_state = {} # Added for system-wide states
 
 # Thread locks for concurrent access
 _sensor_lock = threading.Lock()
 _event_lock = threading.Lock()
 _config_lock = threading.Lock()
+_system_lock = threading.Lock() # Added lock for system state
 
 # Sensor state functions
 def set_sensor_variable(key, value):
@@ -69,6 +71,17 @@ def get_config():
     with _config_lock:
         return dict(_config_state)
 
+# System state functions (New)
+def set_system_variable(key, value):
+    """Set a system state variable."""
+    with _system_lock:
+        _system_state[key] = value
+
+def get_system_variable(key, default=None):
+    """Get a system state variable."""
+    with _system_lock:
+        return _system_state.get(key, default)
+
 def reset_state():
     """Reset all state information (useful for testing)."""
     with _sensor_lock:
@@ -77,3 +90,5 @@ def reset_state():
         _event_state.clear()
     with _config_lock:
         _config_state.clear()
+    with _system_lock: # Added reset for system state
+        _system_state.clear()

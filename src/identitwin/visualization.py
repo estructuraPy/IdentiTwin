@@ -1,19 +1,24 @@
 """
 Visualization module for real-time data display in the IdentiTwin system.
 Uses Dash/Plotly for efficient real-time plotting.
+Includes virtual LED indicators for system status and recording within each tab.
 """
 
 import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash import dcc, html, ALL
+from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import threading
 import plotly.io as pio
 import random
-import time                               # added
-from collections import deque            # added
+import time
+from collections import deque
 import numpy as np
 from .processing_analysis import calculate_fft
+import logging
+import socket
+import webbrowser
+from . import state
 
 # Set template for consistent styling
 pio.templates.default = "plotly_dark"
@@ -45,6 +50,23 @@ COMPONENT_COLORS = {
     'y': '#33FF57',
     'z': '#3357FF'
 }
+
+# --- LED Styles ---
+LED_STYLE_BASE = {
+    'width': '20px',
+    'height': '20px',
+    'borderRadius': '50%',
+    'display': 'inline-block',
+    'marginLeft': '10px',
+    'border': '2px solid grey', # Grey ring
+    'verticalAlign': 'middle',
+}
+
+LED_STYLE_OFF = {**LED_STYLE_BASE, 'backgroundColor': 'black'}
+LED_STYLE_STATUS_ON = {**LED_STYLE_BASE, 'backgroundColor': 'lime'} # Brighter green
+LED_STYLE_RECORDING_ON = {**LED_STYLE_BASE, 'backgroundColor': 'cyan'} # Brighter blue
+# --- End LED Styles ---
+
 def _shade_color(hex_color, dark=False):
     # darken by factor or leave as is
     hex_color = hex_color.lstrip('#')
@@ -53,123 +75,117 @@ def _shade_color(hex_color, dark=False):
     r, g, b = [max(0, min(255,int(c*factor))) for c in (r,g,b)]
     return f'#{r:02X}{g:02X}{b:02X}'
 
+def _create_led_indicators(tab_value):
+    """Helper function to create the HTML structure for LEDs with unique IDs per tab."""
+    return html.Div([
+        html.Span("System Status:", style={'verticalAlign': 'middle'}),
+        # Use dictionary IDs for pattern matching
+        html.Div(id={'type': 'status-led', 'tab': tab_value}, style=LED_STYLE_OFF),
+        html.Span("Recording Status:", style={'marginLeft': '20px', 'verticalAlign': 'middle'}),
+        html.Div(id={'type': 'recording-led', 'tab': tab_value}, style=LED_STYLE_OFF),
+    ], style={'marginTop': '10px', 'marginBottom': '10px', 'textAlign': 'center'}) # Center LEDs
+
 def create_dashboard(system_monitor):
-    """Create and configure the Dash application."""
-    app = dash.Dash(__name__)
-    
+    """Create and configure the Dash application, including LED indicators within each tab."""
+    app = dash.Dash(__name__, suppress_callback_exceptions=True) # Suppress exceptions for pattern matching if needed initially
+
     # Build tabs based on config options
     if system_monitor.config.enable_plots:
         default_tab = None
         tabs_children = []
-        
+
         if system_monitor.config.enable_plot_displacement:
             tab_value = "displacements"
             if default_tab is None:
                 default_tab = tab_value
-            tabs_children.append(
-                dcc.Tab(
-                    label="Displacements",
-                    value=tab_value,
-                    children=[
-                        html.H3("Displacements", style={'textAlign': 'center', 'color': PALETTE[1]}),
-                        html.Div([
-                            html.Label("Select LVDT:"),
-                            dcc.Dropdown(
-                                id='lvdt-selector',
-                                options=[{'label': 'All', 'value': 'all'}] +
-                                        [{'label': f'LVDT {i+1}', 'value': str(i)} 
-                                         for i in range(system_monitor.config.num_lvdts)],
-                                value='all',
-                                multi=True,
-                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
-                            ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
-                        dcc.Graph(id='lvdt-plot')
-                    ]
-                )
-            )
-            
+            tabs_children.append(dcc.Tab(label='Displacements', value=tab_value, children=[
+                _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
+                dcc.Dropdown(
+                    id='lvdt-selector',
+                    options=[{'label': 'All', 'value': 'all'}] +
+                            [{'label': f'LVDT {i+1}', 'value': str(i)} 
+                             for i in range(system_monitor.config.num_lvdts)],
+                    value='all',
+                    multi=True,
+                    style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                ),
+                dcc.Graph(id='lvdt-plot') # Keep original graph ID
+            ]))
+
         if system_monitor.config.enable_accel_plots:
             tab_value = "accelerations"
             if default_tab is None:
                 default_tab = tab_value
-            tabs_children.append(
-                dcc.Tab(
-                    label="Accelerations",
-                    value=tab_value,
-                    children=[
-                        html.H3("Accelerations", style={'textAlign': 'center', 'color': PALETTE[1]}),
-                        html.Div([
-                            html.Label("Select Accelerometer:"),
-                            dcc.Dropdown(
-                                id='acc-selector',
-                                options=[{'label': 'All', 'value': 'all'}] +
-                                        [{'label': f'ACC {i+1}', 'value': str(i)} 
-                                         for i in range(system_monitor.config.num_accelerometers)],
-                                value='all',
-                                multi=True,
-                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
-                            ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
-                        
-                        html.Div([   # componente ahora multi-select
-                            html.Label("Select Component:"),
-                            dcc.Dropdown(
-                                id='acc-component-selector',
-                                options=[
-                                    {'label': 'All', 'value': 'all'},
-                                    {'label': 'X', 'value': 'x'},
-                                    {'label': 'Y', 'value': 'y'},
-                                    {'label': 'Z', 'value': 'z'}
-                                ],
-                                value=['all'],
-                                multi=True,
-                                style={'color': 'black', 'backgroundColor': PALETTE[2]}
-                            ),
-                        ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
-                        dcc.Graph(id='acceleration-plot')
-                    ]
-                )
-            )
-            
+            tabs_children.append(dcc.Tab(label='Accelerations', value=tab_value, children=[
+                _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
+                html.H3("Accelerations", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                html.Div([
+                    html.Label("Select Accelerometer:"),
+                    dcc.Dropdown(
+                        id='acc-selector',
+                        options=[{'label': 'All', 'value': 'all'}] +
+                                [{'label': f'ACC {i+1}', 'value': str(i)} 
+                                 for i in range(system_monitor.config.num_accelerometers)],
+                        value='all',
+                        multi=True,
+                        style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                    ),
+                ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
+                
+                html.Div([   # componente ahora multi-select
+                    html.Label("Select Component:"),
+                    dcc.Dropdown(
+                        id='acc-component-selector',
+                        options=[
+                            {'label': 'All', 'value': 'all'},
+                            {'label': 'X', 'value': 'x'},
+                            {'label': 'Y', 'value': 'y'},
+                            {'label': 'Z', 'value': 'z'}
+                        ],
+                        value=['all'],
+                        multi=True,
+                        style={'color': 'black', 'backgroundColor': PALETTE[2]}
+                    ),
+                ], style={'width': '50%', 'margin': 'auto', 'marginBottom': '40px'}),
+                dcc.Graph(id='acceleration-plot') # Keep original graph ID
+            ]))
+
         if system_monitor.config.enable_fft_plots:
-            tabs_children.append(
-                dcc.Tab(
-                    label="FFT Analysis",
-                    value="fft",
-                    children=[
-                        html.H3("FFT Analysis", style={'textAlign': 'center', 'color': PALETTE[1]}),
-                        html.Div([
-                            html.Label("Select Accelerometer:"),
-                            dcc.Dropdown(
-                                id='fft-acc-selector',
-                                options=[{'label':'All','value':'all'}] +
-                                        [{'label':f'ACC {i+1}','value':str(i)} 
-                                         for i in range(system_monitor.config.num_accelerometers)],
-                                value='all', multi=True,
-                                style={'color':'black','backgroundColor':PALETTE[2]}
-                            )
-                        ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
-                        html.Div([
-                            html.Label("Select Component:"),
-                            dcc.Dropdown(
-                                id='fft-component-selector',
-                                options=[
-                                    {'label':'All','value':'all'},
-                                    {'label':'X','value':'x'},
-                                    {'label':'Y','value':'y'},
-                                    {'label':'Z','value':'z'}
-                                ],
-                                value=['all'],            # default to all => x,y,z
-                                multi=True,
-                                style={'color':'black','backgroundColor':PALETTE[2]}
-                            )
-                        ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
-                        dcc.Graph(id='fft-plot')
-                    ]
-                )
-            )
-            
+            tab_value = "fft"
+            if default_tab is None:
+                default_tab = tab_value
+            tabs_children.append(dcc.Tab(label='FFT Analysis', value=tab_value, children=[
+                _create_led_indicators(tab_value), # ADDED LEDs here with unique ID
+                html.H3("FFT Analysis", style={'textAlign': 'center', 'color': PALETTE[1]}),
+                html.Div([
+                    html.Label("Select Accelerometer:"),
+                    dcc.Dropdown(
+                        id='fft-acc-selector',
+                        options=[{'label':'All','value':'all'}] +
+                                [{'label':f'ACC {i+1}','value':str(i)} 
+                                 for i in range(system_monitor.config.num_accelerometers)],
+                        value='all', multi=True,
+                        style={'color':'black','backgroundColor':PALETTE[2]}
+                    )
+                ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
+                html.Div([
+                    html.Label("Select Component:"),
+                    dcc.Dropdown(
+                        id='fft-component-selector',
+                        options=[
+                            {'label':'All','value':'all'},
+                            {'label':'X','value':'x'},
+                            {'label':'Y','value':'y'},
+                            {'label':'Z','value':'z'}
+                        ],
+                        value=['all'],            # default to all => x,y,z
+                        multi=True,
+                        style={'color':'black','backgroundColor':PALETTE[2]}
+                    )
+                ], style={'width':'50%','margin':'auto','marginBottom':'40px'}),
+                dcc.Graph(id='fft-plot') # Keep original graph ID
+            ]))
+
         layout_children = [
             html.H1("IdentiTwin Real-Time Monitoring",
                     style={'textAlign': 'center', 'color': PALETTE[0]}),
@@ -406,6 +422,32 @@ def create_dashboard(system_monitor):
                 showlegend=True
             )
             return fig
+
+    # --- Modified Callbacks for LEDs using Pattern Matching ---
+    @app.callback(
+        Output({'type': 'status-led', 'tab': ALL}, 'style'), # Match all status LEDs
+        [Input('interval-component', 'n_intervals')]
+    )
+    def update_status_led_style(n):
+        """Update the status LED color based on system running state."""
+        is_running = state.get_system_variable('system_running', False)
+        style = LED_STYLE_STATUS_ON if is_running else LED_STYLE_OFF
+        # Return a list of styles, one for each matched LED
+        num_leds = len(dash.callback_context.outputs_list) # Get number of matched outputs
+        return [style] * num_leds
+
+    @app.callback(
+        Output({'type': 'recording-led', 'tab': ALL}, 'style'), # Match all recording LEDs
+        [Input('interval-component', 'n_intervals')]
+    )
+    def update_recording_led_style(n):
+        """Update the recording LED color based on event recording state."""
+        is_recording = state.get_event_variable('is_event_recording', False)
+        style = LED_STYLE_RECORDING_ON if is_recording else LED_STYLE_OFF
+        # Return a list of styles, one for each matched LED
+        num_leds = len(dash.callback_context.outputs_list) # Get number of matched outputs
+        return [style] * num_leds
+    # --- End Modified Callbacks ---
     
     return app
 

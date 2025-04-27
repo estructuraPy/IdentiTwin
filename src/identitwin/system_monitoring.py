@@ -115,16 +115,21 @@ class MonitoringSystem:
     def setup_sensors(self):
         """
         Initializes and configures the sensors (LVDTs and accelerometers) and LEDs.
+        Handles cases where hardware might not be available.
         """
         print("\n========================= Setting up sensors =========================\n")
         try:
-            # Initialize LEDs first
+            # Initialize LEDs first - check if hardware is available via config
             print("\nSetting up LEDs...")
+            # initialize_leds now returns None if hardware is unavailable
             self.status_led, self.activity_led = self.config.initialize_leds()
             if self.status_led and self.activity_led:
-                print("LEDs initialized.")
+                print("Hardware LEDs initialized.")
+                self.status_led.off() # Ensure status LED is off initially
+                self.activity_led.off() # Ensure activity LED is off initially
             else:
-                print("LED initialization failed or returned None.")
+                print("Hardware LED control not available or initialization failed.")
+                self.status_led, self.activity_led = None, None # Ensure they are None
 
             # Initialize LVDT-related components
             if self.config.enable_lvdt:
@@ -194,13 +199,7 @@ class MonitoringSystem:
         """
         Start the monitoring system.
         Initializes threads for data acquisition and starts hardware components.
-
-        Returns:
-            None
-
-        Assumptions:
-            - Sensors are initialized before calling this method.
-            - Configuration includes necessary parameters.
+        Sets system running state and controls status LED.
         """
         if not self.sensors_initialized:
             print("Error: Sensors are not initialized. Call setup_sensors() first.")
@@ -208,11 +207,12 @@ class MonitoringSystem:
 
         if self.status_led:
             try:
-                self.status_led.on()
+                self.status_led.on() # Turn ON Status LED (Green)
             except Exception as e:
                 print(f"Warning: Could not turn on status LED: {e}")
 
         self.running = True
+        state.set_system_variable('system_running', True) # Set global state
         self.acquisition_thread = threading.Thread(
             target=self._data_acquisition_thread, daemon=True
         )
@@ -246,13 +246,11 @@ class MonitoringSystem:
     def stop_monitoring(self):
         """
         Stop the monitoring system.
-        Terminates threads and turns off LEDs.
-
-        Returns:
-            None
+        Terminates threads, turns off LEDs, and resets system running state.
         """
         print("Stopping monitoring system...")
         self.running = False
+        state.set_system_variable('system_running', False) # Reset global state
 
         if self.acquisition_thread and self.acquisition_thread.is_alive():
             print("Waiting for acquisition thread to finish...")
@@ -268,12 +266,12 @@ class MonitoringSystem:
 
         if self.status_led:
             try:
-                self.status_led.off()
+                self.status_led.off() # Turn OFF Status LED (Green)
             except Exception as e:
                 print(f"Warning: Could not turn off status LED: {e}")
         if self.activity_led:
             try:
-                self.activity_led.off()
+                self.activity_led.off() # Turn OFF Activity/Recording LED (Blue)
             except Exception as e:
                 print(f"Warning: Could not turn off activity LED: {e}")
 
@@ -311,8 +309,7 @@ class MonitoringSystem:
     def _data_acquisition_thread(self):
         """
         Thread for data acquisition from sensors.
-        Collects raw sensor data (acceleration/displacement) and enqueues for event handling.
-        Applies calibration offsets/slopes from the config object. Handles read errors.
+        Collects raw sensor data, enqueues it, and controls the physical activity/recording LED.
         """
         if not self.sensors_initialized:
              print("Error: Data acquisition thread cannot start, sensors not initialized.", file=sys.stderr)
@@ -341,6 +338,21 @@ class MonitoringSystem:
                 now = time.perf_counter()
                 sensor_data_packet = None
                 data_acquired = False
+
+                # --- Control Physical Activity/Recording LED (Blue) ---
+                is_recording = state.get_event_variable("is_event_recording", False)
+                if self.activity_led:
+                    try:
+                        if is_recording:
+                            self.activity_led.on() # Turn ON if recording
+                        else:
+                            self.activity_led.off() # Turn OFF if not recording
+                    except Exception as e:
+                        # Log infrequently to avoid flooding console
+                        if time.time() % 10 < 0.1: # Log roughly every 10 seconds
+                             print(f"Warning: Could not control activity LED: {e}", file=sys.stderr)
+                # --- End LED Control ---
+
 
                 if self.config.enable_accel and self.accelerometers and now >= next_accel_time:
                     # Add a mutex or lock for accelerometer access
@@ -540,6 +552,10 @@ class MonitoringSystem:
             print(f"Fatal error in data acquisition thread: {e}", file=sys.stderr)
             traceback.print_exc()
         finally:
+            # Ensure LEDs are off when thread exits unexpectedly
+            if self.status_led: self.status_led.off()
+            if self.activity_led: self.activity_led.off()
+            state.set_system_variable('system_running', False) # Ensure state reflects stop
             print("--- Data acquisition thread finished ---")
 
     def _precise_sleep(self, sleep_time):
@@ -596,6 +612,7 @@ class MonitoringSystem:
     def _print_status(self, sensor_data):
         """
         Print current system status information.
+        Reads recording status from the state module.
 
         Args:
             sensor_data: A dictionary containing sensor data from the latest acquisition.

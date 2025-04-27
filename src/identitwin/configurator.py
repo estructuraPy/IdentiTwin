@@ -1,25 +1,7 @@
 """
-Configuration management module for the  monitoring system.
-
-This module handles all system-wide configuration including:
-- Hardware setup and initialization
-- Sampling rates and timing parameters
-- Event detection thresholds
-- Data storage paths and organization
-- Sensor calibration parameters
-- System operational modes
-
-Key Features:
-- Dynamic configuration based on available hardware
-- Platform-specific adaptations (Raspberry Pi vs simulation)
-- Automatic directory structure creation
-- LED indicator management
-- ADC (ADS1115) configuration for LVDT sensors
-- MPU6050 accelerometer setup
-- Comprehensive parameter validation
-
-Classes:
-    SystemConfig: Main configuration class with all system parameters
+Configuration management module for the monitoring system.
+Handles hardware setup, parameters, and operational modes.
+Skips hardware initialization if libraries are unavailable.
 """
 import os
 import platform
@@ -39,26 +21,49 @@ warnings.filterwarnings("ignore", message=".*chip_id == None.*")
 # Check if we're running on Linux (likely Raspberry Pi)
 IS_RASPBERRY_PI = platform.system() == "Linux"
 I2C_AVAILABLE = False  # Default to False until proven otherwise
+LED = None # Define LED as None initially
 
 # Only attempt to import hardware libraries if on Linux
-try:
-    from gpiozero import LED
-    import adafruit_ads1x15.ads1115 as ADS
-    import board
-    import busio
-    from adafruit_ads1x15.analog_in import AnalogIn
-    from mpu6050 import mpu6050
-    I2C_AVAILABLE = True
-    print("Hardware libraries successfully imported.")
-except (ImportError, NotImplementedError) as e:
-    print(f"Note: Hardware libraries not available. Using software simulation mode.")
-    LED = None
-    ADS = None
-    board = None
-    busio = None
-    AnalogIn = None
-    mpu6050 = None
-    I2C_AVAILABLE = False
+if IS_RASPBERRY_PI: # Check if it's Linux first
+    try:
+        from gpiozero import LED # Now LED is the actual class if import succeeds
+        import adafruit_ads1x15.ads1115 as ADS
+        import board
+        import busio
+        from adafruit_ads1x15.analog_in import AnalogIn
+        from mpu6050 import mpu6050
+        # Check if I2C is actually working (optional but good)
+        try:
+            i2c_test = busio.I2C(board.SCL, board.SDA)
+            i2c_test.deinit() # Release the bus
+            I2C_AVAILABLE = True
+            print("Hardware libraries successfully imported and I2C available.")
+        except Exception as i2c_err:
+             print(f"Hardware libraries imported, but I2C check failed: {i2c_err}. Assuming I2C unavailable.")
+             I2C_AVAILABLE = False
+             LED = None # Ensure LED is None if I2C fails
+
+    except (ImportError, NotImplementedError, RuntimeError) as e: # Added RuntimeError
+        print(f"Note: Hardware libraries not available or failed to import ({type(e).__name__}). Running in software simulation mode.")
+        # Ensure all hardware variables are None if import fails
+        LED = None
+        ADS = None
+        board = None
+        busio = None
+        AnalogIn = None
+        mpu6050 = None
+        I2C_AVAILABLE = False
+else:
+     print("Note: Not running on Linux. Hardware control disabled. Running in software simulation mode.")
+     # Ensure all hardware variables are None on non-Linux
+     LED = None
+     ADS = None
+     board = None
+     busio = None
+     AnalogIn = None
+     mpu6050 = None
+     I2C_AVAILABLE = False
+
 
 # Print platform information
 print(f"Platform: {platform.system()} {platform.release()}")
@@ -226,22 +231,20 @@ class SystemConfig:
         return thresholds
 
     def initialize_leds(self):
-        """Initialize LED indicators using pins specified in self.gpio_pins."""
-        global LED  # Reference the potentially imported LED class
+        """Initialize LED indicators using pins specified in self.gpio_pins.
+        Returns None, None if hardware is unavailable."""
+        global LED # Reference the potentially imported LED class
+
+        if not I2C_AVAILABLE or LED is None:
+            print("Hardware LED control not available (I2C or gpiozero unavailable). Skipping LED initialization.")
+            return None, None # Return None if hardware isn't available
 
         if not self.gpio_pins or len(self.gpio_pins) < 2:
-            print("Warning: GPIO pins not configured correctly. Using default pins 17 and 18 for NonFunctionalLED.")
-            # Fallback to non-functional with default pins if config is wrong
-            return NonFunctionalLED(17), NonFunctionalLED(18)
+            print("Warning: GPIO pins not configured correctly. Skipping LED initialization.")
+            return None, None # Return None if config is wrong
 
         status_pin = self.gpio_pins[0]
         activity_pin = self.gpio_pins[1]
-
-        # Check if the hardware library (gpiozero.LED) is available
-        if LED is None or not I2C_AVAILABLE:
-            print(f"Warning: Hardware LED control not available. Using NonFunctionalLED for pins {status_pin}, {activity_pin}.")
-            # Return non-functional substitutes using configured pins
-            return NonFunctionalLED(status_pin), NonFunctionalLED(activity_pin)
 
         try:
             # Attempt to initialize hardware LEDs using configured pins
@@ -258,14 +261,14 @@ class SystemConfig:
         except Exception as e:
             # Catch any error during hardware initialization
             print(f"Error initializing hardware LEDs on pins {status_pin}, {activity_pin}: {e}")
-            print("Falling back to NonFunctionalLED.")
-            # Return non-functional substitutes on error using configured pins
-            return NonFunctionalLED(status_pin), NonFunctionalLED(activity_pin)
+            print("Skipping LED initialization due to error.")
+            # Return None on error
+            return None, None
 
     def create_ads1115(self):
         """Create and return an ADS1115 ADC object."""
         if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
-            print("Error: Cannot create ADS1115, required hardware libraries not available.")
+            print("Error: Cannot create ADS1115, required hardware libraries not available or I2C failed.")
             return None
         try:
             # Initialize I2C bus
@@ -282,7 +285,7 @@ class SystemConfig:
     def create_lvdt_channels(self, ads):
         """Create LVDT channels using the provided ADS1115 object."""
         if ads is None or not I2C_AVAILABLE or AnalogIn is None:
-            print("Error: Cannot create LVDT channels, required hardware libraries not available.")
+            print("Error: Cannot create LVDT channels, ADS object is None or required hardware libraries not available.")
             return None
 
         try:
@@ -310,7 +313,7 @@ class SystemConfig:
     def create_accelerometers(self):
         """Create and return MPU6050 accelerometer objects."""
         if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
-            print("Error: Cannot create accelerometers, required hardware libraries not available.", file=sys.stderr)
+            print("Error: Cannot create accelerometers, required hardware libraries not available or I2C failed.", file=sys.stderr)
             return None
 
         mpu_list = []
@@ -334,34 +337,6 @@ class SystemConfig:
                 continue  # Continue trying other sensors even if one fails
 
         return mpu_list if mpu_list else None  # Return list or None if empty
-
-class NonFunctionalLED:
-    """LED replacement when hardware initialization fails, preserves the interface."""
-    
-    def __init__(self, pin_number):
-        self.pin_number = pin_number
-        self.name = f"NonFunctional LED (pin {pin_number})"
-        print(f"WARNING: Using non-functional LED for pin {pin_number} - hardware control unavailable")
-        
-    def on(self):
-        """Turn on the LED - logs failure since this is non-functional."""
-        print(f"WARNING: Cannot turn on LED {self.pin_number} (hardware unavailable)")
-        
-    def off(self):
-        """Turn off the LED - logs failure since this is non-functional."""
-        print(f"WARNING: Cannot turn off LED {self.pin_number} (hardware unavailable)")
-        
-    def toggle(self):
-        """Toggle the LED - logs failure since this is non-functional."""
-        print(f"WARNING: Cannot toggle LED {self.pin_number} (hardware unavailable)")
-        
-    def blink(self, on_time=1, off_time=1, n=None, background=True):
-        """Simulate LED blinking - logs failure since this is non-functional."""
-        print(f"WARNING: Cannot blink LED {self.pin_number} (hardware unavailable)")
-        
-    def close(self):
-        """Close the LED - no-op since this is non-functional."""
-        pass
 
 # Utility functions
 # Removed leds() function
