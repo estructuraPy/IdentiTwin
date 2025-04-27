@@ -1,6 +1,17 @@
+# Core dependencies needed to install the package
+numpy>=1.24.0
+matplotlib>=3.7.1
+pandas>=2.0.0
+scipy>=1.10.0
+tqdm>=4.62.0
+pyserial>=3.5
+
+# Documentation dependencies
 sphinx>=7.1.0
 sphinx-rtd-theme>=2.0.0
 sphinx-autodoc-typehints>=1.25.2
 myst-parser>=2.0.0
 sphinx-autoapi>=3.0.0
-identitwin[docs]
+
+# Install the package itself in editable mode
+-e ..
