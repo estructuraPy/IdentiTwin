@@ -9,16 +9,16 @@ Configuration
 Overview
 --------
 
-The ``configurator`` module provides the ``SystemConfig`` class for managing system parameters, operational modes, and hardware initialization for the IdentiTwin system, primarily targeting Raspberry Pi. It handles the conditional import of hardware libraries and determines the operational mode (hardware or simulation) based on platform and library availability.
+The ``configurator`` module provides the ``SystemConfig`` class for managing system parameters and hardware initialization, primarily for Raspberry Pi. It handles conditional import of hardware libraries and sets the operational mode (hardware or simulation).
 
 Key Features
 -----------
 
-* Hardware detection: Checks for Linux environment (Raspberry Pi) and I2C availability.
-* Conditional library import: Attempts to import necessary hardware libraries (`gpiozero`, `adafruit_ads1x15`, `mpu6050`, etc.).
-* Operational mode setting: Defaults to software simulation if hardware or libraries are unavailable.
-* System settings management: Configures sensor enablement, sampling rates, event thresholds, file paths, GPIO pins, etc.
-* Hardware initialization methods: Provides functions to set up LEDs, ADC (ADS1115), and accelerometers (MPU6050) if in hardware mode.
-* Directory management: Creates necessary output directories for logs, events, and reports.
-* Calibration storage: Holds LVDT and accelerometer calibration data.
+* Hardware detection: Checks for Linux environment and I2C.
+* Conditional library import: Imports hardware libraries (`gpiozero`, `adafruit_ads1x15`, etc.) if available.
+* Operational mode setting: Sets hardware or simulation mode.
+* System settings management: Configures sensors, sampling rates, thresholds, paths, etc.
+* Hardware initialization: Provides methods to set up LEDs, ADC, and accelerometers.
+* Directory management: Creates output directories.
+* Calibration storage: Holds calibration data.
 
