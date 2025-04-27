@@ -1,0 +1,27 @@
+EVENT ANALYSIS REPORT
+===================
+
+Time: 20250427_000148
+Duration: 53.37 seconds
+
+PEAK ACCELERATIONS:
+  X-axis: 8.8693 m/s2
+  Y-axis: 6.9540 m/s2
+  Z-axis: 8.8693 m/s2
+  Resultant magnitude: 14.0776 m/s2
+
+FREQUENCY ANALYSIS:
+  Dominant X frequencies: 16.67 Hz, 0.83 Hz, 17.49 Hz
+  Dominant Y frequencies: 18.34 Hz, 15.00 Hz, 1.67 Hz
+  Dominant Z frequencies: 16.67 Hz, 0.83 Hz, 17.49 Hz
+
+PEAK DISPLACEMENTS:
+  LVDT 1: 5.3430 mm
+  LVDT 2: 5.7579 mm
+
+Related files:
+  - acceleration.csv
+  - displacements.csv
+  - analysis_20250427_000148_accel1.png
+  - analysis_20250427_000148_accel2.png
+  - analysis_20250427_000148_lvdt_all.png

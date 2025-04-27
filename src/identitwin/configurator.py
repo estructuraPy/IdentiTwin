@@ -1,7 +1,22 @@
-"""
-Configuration management module for the monitoring system.
-Handles hardware setup, parameters, and operational modes.
-Skips hardware initialization if libraries are unavailable.
+"""Configuration management and hardware setup module for IdentiTwin.
+
+Provides the `SystemConfig` class to manage system parameters, operational
+modes, and hardware initialization for Raspberry Pi. Attempts to import
+necessary hardware libraries (`gpiozero`, `adafruit_ads1x15`, `mpu6050`, etc.)
+and checks for I2C availability. If hardware access fails or if not running
+on Linux, it defaults to a software-only mode where hardware interactions
+are skipped or simulated.
+
+Attributes:
+    IS_RASPBERRY_PI (bool): True if the system detects it's running on Linux.
+    I2C_AVAILABLE (bool): True if hardware libraries were imported and I2C bus
+        communication check succeeded.
+    LED (class or None): The `gpiozero.LED` class if available, otherwise None.
+    ADS (module or None): The `adafruit_ads1x15.ads1115` module if available.
+    board (module or None): The `board` module if available.
+    busio (module or None): The `busio` module if available.
+    AnalogIn (class or None): The `adafruit_ads1x15.analog_in.AnalogIn` class if available.
+    mpu6050 (class or None): The `mpu6050.mpu6050` class if available.
 """
 import os
 import platform
@@ -71,7 +86,56 @@ print(f"Hardware mode: {'Raspberry Pi/Hardware' if I2C_AVAILABLE else 'Software 
 
 
 class SystemConfig:
-    """Configuration class for the monitoring system."""
+    """Configuration class for the IdentiTwin monitoring system.
+
+    Manages all settings, including sensor enablement, sampling rates,
+    thresholds, file paths, and hardware initialization parameters. Provides
+    methods to initialize hardware components like LEDs, ADC (ADS1115),
+    and accelerometers (MPU6050) if running on compatible hardware (Raspberry Pi)
+    and libraries are available.
+
+    Attributes:
+        output_dir (str): Base directory for saving output files (logs, events, reports).
+        events_dir (str): Subdirectory for event-specific data.
+        logs_dir (str): Subdirectory for log files (performance, calibration).
+        reports_dir (str): Subdirectory for generated reports.
+        acceleration_file (str): Path for continuous acceleration CSV log.
+        displacement_file (str): Path for continuous displacement CSV log.
+        general_file (str): Path for combined sensor CSV log.
+        enable_performance_monitoring (bool): Enable/disable performance logging.
+        performance_log_file (str): Path for performance log CSV.
+        enable_lvdt (bool): Enable/disable LVDT sensors.
+        enable_accel (bool): Enable/disable accelerometer sensors.
+        num_lvdts (int): Number of LVDT sensors to configure.
+        lvdt_slopes (list or None): List of slopes (mm/V) for LVDT calibration.
+        num_accelerometers (int): Number of accelerometer sensors to configure.
+        sampling_rate_acceleration (float): Target sampling rate for accelerometers (Hz).
+        sampling_rate_lvdt (float): Target sampling rate for LVDTs (Hz).
+        plot_refresh_rate (float): Target refresh rate for dashboard plots (Hz).
+        time_step_acceleration (float): Calculated time interval between accel samples (s).
+        time_step_lvdt (float): Calculated time interval between LVDT samples (s).
+        time_step_plot_refresh (float): Calculated time interval between plot updates (s).
+        window_duration (int): Duration for plotting windows (seconds, currently unused).
+        gravity (float): Standard gravity value (m/s²).
+        max_accel_jitter (float): Max allowed jitter for accel timing (ms, unused).
+        max_lvdt_jitter (float): Max allowed jitter for LVDT timing (ms, unused).
+        trigger_acceleration_threshold (float): Threshold for event triggering (m/s²).
+        trigger_displacement_threshold (float): Threshold for event triggering (mm).
+        detrigger_acceleration_threshold (float): Threshold for event detriggering (m/s²).
+        detrigger_displacement_threshold (float): Threshold for event detriggering (mm).
+        pre_event_time (float): Duration of data to save before an event trigger (s).
+        post_event_time (float): Duration of data to save after an event detrigger (s).
+        min_event_duration (float): Minimum duration for a valid event (s).
+        lvdt_gain (float): ADC gain setting for LVDTs.
+        lvdt_scale_factor (float): ADC scale factor for voltage conversion (mV).
+        gpio_pins (list): GPIO pin numbers [Status LED, Activity LED].
+        enable_plots (bool): Enable/disable real-time plotting dashboard.
+        enable_plot_displacement (bool): Enable/disable LVDT plot tab.
+        enable_accel_plots (bool): Enable/disable Accelerometer plot tab.
+        enable_fft_plots (bool): Enable/disable FFT plot tab.
+        lvdt_calibration (list): Stores calibration data populated by calibration functions.
+        accel_offsets (list): Stores calibration offsets populated by calibration functions.
+    """
 
     def __init__(
         self,
@@ -97,7 +161,37 @@ class SystemConfig:
         enable_accel_plots=True,
         enable_fft_plots=True,
     ):
-        """Initialize system configuration."""
+        """Initializes the system configuration.
+
+        Sets up file paths, sensor parameters, sampling rates, thresholds, and
+        hardware settings based on provided arguments or defaults. Creates necessary
+        output directories.
+
+        Args:
+            enable_lvdt (bool): Enable LVDT sensors.
+            enable_accel (bool): Enable accelerometer sensors.
+            output_dir (str, optional): Base directory for output. Defaults to
+                'repository/<YYYYMMDD>'.
+            num_lvdts (int): Number of LVDT sensors.
+            num_accelerometers (int): Number of accelerometer sensors.
+            lvdt_slopes (list, optional): List of slopes (mm/V) for LVDT calibration.
+            sampling_rate_acceleration (float): Target accel sampling rate (Hz).
+            sampling_rate_lvdt (float): Target LVDT sampling rate (Hz).
+            plot_refresh_rate (float): Target plot refresh rate (Hz).
+            gpio_pins (list, optional): GPIO pins for [Status, Activity] LEDs.
+                Defaults to [18, 17].
+            trigger_acceleration_threshold (float, optional): Event trigger threshold (m/s²).
+            detrigger_acceleration_threshold (float, optional): Event detrigger threshold (m/s²).
+            trigger_displacement_threshold (float, optional): Event trigger threshold (mm).
+            detrigger_displacement_threshold (float, optional): Event detrigger threshold (mm).
+            pre_event_time (float): Pre-event buffer duration (s).
+            post_event_time (float): Post-event buffer duration (s).
+            min_event_duration (float): Minimum valid event duration (s).
+            enable_plots (bool): Enable plotting dashboard.
+            enable_plot_displacement (bool): Enable LVDT plot tab.
+            enable_accel_plots (bool): Enable Accelerometer plot tab.
+            enable_fft_plots (bool): Enable FFT plot tab.
+        """
         # Set output directory first to avoid the AttributeError
         self.output_dir = output_dir
         if self.output_dir is None:
@@ -197,8 +291,22 @@ class SystemConfig:
                 f"Warning: Plot refresh rate limited to {self.plot_refresh_rate} Hz (requested: {plot_refresh_rate} Hz)"
             )
 
+        # Initialize calibration attributes
+        self.lvdt_calibration = [None] * self.num_lvdts
+        self.accel_offsets = [None] * self.num_accelerometers
+
     def _initialize_output_directory(self, custom_dir=None):
-        """Initialize the output directory for saving data."""
+        """Initializes and returns the path to the session's output directory.
+
+        Deprecated/Unused: Directory creation is now handled directly in `__init__`.
+
+        Args:
+            custom_dir (str, optional): A custom base directory. Defaults to None,
+                in which case 'repository' is used.
+
+        Returns:
+            str: The path to the session-specific output directory (e.g., 'repository/YYYY-MM-DD').
+        """
         if custom_dir:
             base_folder = custom_dir
         else:
@@ -218,7 +326,14 @@ class SystemConfig:
         return session_path
 
     def initialize_thresholds(self):
-        """Initialize the thresholds for event detection."""
+        """Initializes and returns the dictionary of event detection thresholds.
+
+        Based on the configuration settings (`trigger_*`, `detrigger_*`, `pre_event_time`, etc.).
+        Sets thresholds to None for disabled sensor types.
+
+        Returns:
+            dict: A dictionary containing the configured thresholds.
+        """
         thresholds = {
             "acceleration": self.trigger_acceleration_threshold if self.enable_accel else None,
             "displacement": self.trigger_displacement_threshold if self.enable_lvdt else None,
@@ -231,8 +346,17 @@ class SystemConfig:
         return thresholds
 
     def initialize_leds(self):
-        """Initialize LED indicators using pins specified in self.gpio_pins.
-        Returns None, None if hardware is unavailable."""
+        """Initializes hardware LEDs using configured GPIO pins.
+
+        Attempts to create `gpiozero.LED` objects for status and activity LEDs.
+        Requires `gpiozero` library and running on compatible hardware (Raspberry Pi).
+        Ensures LEDs start in the OFF state.
+
+        Returns:
+            tuple[gpiozero.LED or None, gpiozero.LED or None]: A tuple containing
+            the initialized status LED and activity LED objects, or (None, None)
+            if hardware/libraries are unavailable or initialization fails.
+        """
         global LED # Reference the potentially imported LED class
 
         if not I2C_AVAILABLE or LED is None:
@@ -266,7 +390,15 @@ class SystemConfig:
             return None, None
 
     def create_ads1115(self):
-        """Create and return an ADS1115 ADC object."""
+        """Creates and configures an ADS1115 ADC object via I2C.
+
+        Requires `adafruit_ads1x15`, `board`, `busio` libraries and working I2C.
+        Sets the ADC gain based on `self.lvdt_gain`.
+
+        Returns:
+            ADS.ADS1115 or None: An initialized ADS1115 object, or None if
+            hardware/libraries are unavailable or initialization fails.
+        """
         if not I2C_AVAILABLE or busio is None or board is None or ADS is None:
             print("Error: Cannot create ADS1115, required hardware libraries not available or I2C failed.")
             return None
@@ -283,7 +415,20 @@ class SystemConfig:
             return None
 
     def create_lvdt_channels(self, ads):
-        """Create LVDT channels using the provided ADS1115 object."""
+        """Creates analog input channels for LVDTs on the ADS1115.
+
+        Initializes `AnalogIn` objects for the configured number of LVDTs,
+        using default pins (P0, P1, ...). Performs an initial voltage read
+        for each channel upon creation.
+
+        Args:
+            ads (ADS.ADS1115): An initialized ADS1115 object.
+
+        Returns:
+            list[AnalogIn] or None: A list of initialized `AnalogIn` channel
+            objects, or None if `ads` is None, hardware/libraries are unavailable,
+            or no channels could be initialized.
+        """
         if ads is None or not I2C_AVAILABLE or AnalogIn is None:
             print("Error: Cannot create LVDT channels, ADS object is None or required hardware libraries not available.")
             return None
@@ -311,7 +456,20 @@ class SystemConfig:
             return None
 
     def create_accelerometers(self):
-        """Create and return MPU6050 accelerometer objects."""
+        """Creates and initializes MPU6050 accelerometer objects via I2C.
+
+        Attempts to instantiate `mpu6050.mpu6050` objects for the configured
+        number of accelerometers, assuming consecutive I2C addresses starting
+        from 0x68. Performs a basic communication check (reading temperature)
+        for each sensor.
+
+        Requires `mpu6050`, `board`, `busio` libraries and working I2C.
+
+        Returns:
+            list[mpu6050] or None: A list of initialized MPU6050 objects that
+            responded successfully, or None if hardware/libraries are unavailable
+            or no sensors could be initialized.
+        """
         if not I2C_AVAILABLE or mpu6050 is None or board is None or busio is None:
             print("Error: Cannot create accelerometers, required hardware libraries not available or I2C failed.", file=sys.stderr)
             return None
@@ -341,7 +499,21 @@ class SystemConfig:
 # Utility functions
 
 def thresholds(trigger_acceleration, trigger_displacement, pre_time, enable_accel, enable_lvdt):
-    """Initialize thresholds for event detection."""
+    """Initializes a dictionary of event detection thresholds.
+
+    Deprecated: Use `SystemConfig.initialize_thresholds()` or
+    `SimulatorConfig.initialize_thresholds()` instead.
+
+    Args:
+        trigger_acceleration (float): Acceleration trigger threshold.
+        trigger_displacement (float): Displacement trigger threshold.
+        pre_time (float): Pre-event buffer time.
+        enable_accel (bool): Whether accelerometers are enabled.
+        enable_lvdt (bool): Whether LVDTs are enabled.
+
+    Returns:
+        dict: Dictionary containing threshold values.
+    """
     return {
         "acceleration": trigger_acceleration if enable_accel else None,
         "displacement": trigger_displacement if enable_lvdt else None,

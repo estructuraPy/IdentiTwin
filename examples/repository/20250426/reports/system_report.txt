@@ -1,0 +1,24 @@
+# IdentiTwin System Report
+Generated: 2025-04-26 23:53:53
+
+## Mode of Operation:
+Operational Mode: Combined Mode (LVDT + Accelerometers)
+LVDT Enabled: True
+Number of LVDTs: 2
+Accelerometer Enabled: True
+Number of accelerometers: 2
+
+## Sampling configuration:
+  Accelerometer Rate: 100.0 Hz
+  LVDT Rate: 20.0 Hz
+  Plot Refresh Rate: 1.0 Hz
+
+## Event detection parameters:
+  Acceleration Threshold: 0.981 m/s^2
+  Displacement Threshold: 10.0 mm
+  Pre-trigger Buffer: 5.0 seconds
+  Post-trigger Buffer: 15.0 seconds
+  Minimum Event Duration: 2.0 seconds
+
+## Data Storage:
+  Base Directory: repository\20250426

@@ -1,23 +1,18 @@
-"""
-Data processing module for the IdentiTwin monitoring system.
+"""Data processing and storage module for the IdentiTwin system.
 
-This module handles all aspects of sensor data processing including:
-- Data acquisition and validation
-- CSV file management and data storage
-- Real-time data processing
-- Multi-sensor data synchronization
-- Data format conversions
+Handles reading raw sensor data, applying calibration, managing CSV file
+creation and writing for both continuous logging (if enabled) and event-specific
+data storage. Also includes functions for extracting numerical data from
+event buffers for analysis.
 
 Key Features:
-- Multiple sensor type support (LVDT, accelerometer)
-- Automated file creation and management
-- Data validation and cleaning
-- Time synchronization between sensors
-- Error detection and handling
-- Efficient data structure management
-
-The module provides core functionality for handling all sensor data
-throughout the monitoring system lifecycle.
+    - Initialization of CSV files with appropriate headers for different data types.
+    - Reading LVDT voltage and applying calibration (slope/intercept).
+    - Handling missing or incomplete LVDT calibration data.
+    - Extracting time series data (timestamps, accel, LVDT) from event buffers
+      into NumPy arrays for analysis.
+    - Creating event-specific CSV files for LVDT and accelerometer data.
+    - Time synchronization and formatting for CSV output.
 """
 
 import csv
@@ -28,7 +23,21 @@ import time  # Added for sleep functionality
 from datetime import datetime, timedelta
 
 def initialize_general_csv(num_lvdts, num_accelerometers, filename='general_measurements.csv'):
-    """Initialize a CSV file for storing both LVDT and accelerometer data."""
+    """Initializes a CSV file for storing combined LVDT and accelerometer data.
+
+    Creates the file and writes the header row, including columns for timestamp,
+    relative time, LVDT voltage/displacement, and accelerometer X/Y/Z/Magnitude
+    for the specified number of sensors.
+
+    Args:
+        num_lvdts (int): The number of LVDT sensors.
+        num_accelerometers (int): The number of accelerometer sensors.
+        filename (str, optional): The path to the CSV file to be created.
+            Defaults to 'general_measurements.csv'.
+
+    Returns:
+        str: The filename of the initialized CSV file.
+    """
     with open(filename, 'w', newline='') as f:
         writer = csv.writer(f)
         
@@ -48,7 +57,19 @@ def initialize_general_csv(num_lvdts, num_accelerometers, filename='general_meas
     return filename
 
 def initialize_displacement_csv(filename='displacements.csv', num_lvdts=2):
-    """Initialize a CSV file for LVDT displacement measurements."""
+    """Initializes a CSV file specifically for LVDT displacement data.
+
+    Creates the file and writes the header row, including columns for timestamp,
+    relative time, and voltage/displacement for each LVDT.
+
+    Args:
+        filename (str, optional): The path to the CSV file to be created.
+            Defaults to 'displacements.csv'.
+        num_lvdts (int, optional): The number of LVDT sensors. Defaults to 2.
+
+    Returns:
+        str: The filename of the initialized CSV file.
+    """
     with open(filename, 'w', newline='') as f:
         writer = csv.writer(f)
         
@@ -61,7 +82,20 @@ def initialize_displacement_csv(filename='displacements.csv', num_lvdts=2):
     return filename
 
 def initialize_acceleration_csv(filename='acceleration.csv', num_accelerometers=2):
-    """Initialize a CSV file for accelerometer measurements."""
+    """Initializes a CSV file specifically for accelerometer data.
+
+    Creates the file and writes the header row, including columns for timestamp,
+    relative time, and X/Y/Z/Magnitude for each accelerometer.
+
+    Args:
+        filename (str, optional): The path to the CSV file to be created.
+            Defaults to 'acceleration.csv'.
+        num_accelerometers (int, optional): The number of accelerometer sensors.
+            Defaults to 2.
+
+    Returns:
+        str: The filename of the initialized CSV file.
+    """
     with open(filename, 'w', newline='') as f:
         writer = csv.writer(f)
         
@@ -74,10 +108,27 @@ def initialize_acceleration_csv(filename='acceleration.csv', num_accelerometers=
     return filename
 
 def read_lvdt_data(lvdt_channels, config):
-    """
-    Reads each LVDT channel and applies slope/intercept calibration.
-    Raises exception if calibration data is missing.
-    Returns a list of dicts with 'voltage' and 'displacement'.
+    """Reads voltage from LVDT channels and applies calibration.
+
+    Iterates through the provided LVDT channel objects, reads the voltage,
+    retrieves the corresponding calibration slope and intercept from the
+    `config.lvdt_calibration` list, and calculates the displacement. Handles
+    missing or incomplete calibration data by printing a warning and using
+    default values (slope=20, intercept=0). Includes a small delay before
+    reading for stability.
+
+    Args:
+        lvdt_channels (list): A list of LVDT channel objects (e.g., `AnalogIn`
+            instances) that have a readable `voltage` attribute.
+        config (SystemConfig or SimulatorConfig): The system configuration object,
+            which must have an `lvdt_calibration` attribute (a list of dicts
+            containing 'slope' and 'intercept').
+
+    Returns:
+        list[dict]: A list of dictionaries, one for each channel. Each dictionary
+            contains 'voltage' (float) and 'displacement' (float). If reading or
+            calibration fails for a channel, default values (0.0) might be returned
+            in its dictionary along with a printed error message.
     """
     lvdt_values = []
     for i, ch in enumerate(lvdt_channels):
@@ -126,7 +177,29 @@ def read_lvdt_data(lvdt_channels, config):
     return lvdt_values
 
 def extract_data_from_event(event_data, start_time, config):
-    """Extract numerical data from event_data structure for analysis."""
+    """Extracts numerical time series data from a buffered event into NumPy arrays.
+
+    Processes a list of dictionaries (representing sensor readings over time)
+    collected during an event. Extracts timestamps, accelerometer data (X, Y, Z, Mag),
+    and LVDT data (displacement) for each sensor. Converts these into NumPy arrays,
+    calculating relative timestamps based on the earliest timestamp in the event.
+
+    Args:
+        event_data (list[dict]): A list where each dictionary represents a
+            sensor reading packet, typically containing 'timestamp' and
+            'sensor_data' (which in turn contains 'accel_data' and/or 'lvdt_data').
+        start_time (datetime): The nominal start time of the event (used for context,
+            but relative time is calculated from the first timestamp in `event_data`).
+        config (SystemConfig or SimulatorConfig): The system configuration object, used
+            to determine the number of expected sensors (`num_accelerometers`, `num_lvdts`)
+            and which sensor types are enabled (`enable_accel`, `enable_lvdt`).
+
+    Returns:
+        dict: A dictionary where keys are strings identifying the data
+            (e.g., 'timestamps', 'accel1_x', 'lvdt1_displacement', 'lvdt1_time')
+            and values are NumPy arrays containing the corresponding numerical data.
+            Returns an empty dictionary if no valid timestamps are found.
+    """
     np_data = {}
     
     # Extract timestamps
@@ -217,7 +290,22 @@ def extract_data_from_event(event_data, start_time, config):
     return np_data
 
 def create_displacement_csv(event_data, event_folder, config):
-    """Create CSV file for LVDT displacement data."""
+    """Creates a CSV file containing LVDT data for a specific event.
+
+    Writes the timestamp, calculated relative time (based on sample count and
+    configured LVDT sampling rate), voltage, and displacement for each LVDT
+    sensor during the event to a CSV file within the specified event folder.
+
+    Args:
+        event_data (list[dict]): The buffered data collected for the event.
+        event_folder (str): The path to the directory where the event's files
+            are stored.
+        config (SystemConfig or SimulatorConfig): The system configuration object,
+            used for `num_lvdts` and `sampling_rate_lvdt`.
+
+    Returns:
+        str or None: The full path to the created CSV file, or None if an error occurred.
+    """
     displacement_file = os.path.join(event_folder, 'displacements.csv')
     
     try:
@@ -260,7 +348,6 @@ def create_displacement_csv(event_data, event_folder, config):
                     # Optionally log missing data or handle differently
                     logging.debug(f"Skipping data point due to missing LVDT data: {data.get('timestamp')}")
 
-
             # Write all collected rows at once
             if rows_to_write:
                 writer.writerows(rows_to_write)
@@ -273,7 +360,23 @@ def create_displacement_csv(event_data, event_folder, config):
         return None
 
 def create_acceleration_csv(event_data, event_folder, config):
-    """Create CSV file for accelerometer data."""
+    """Creates a CSV file containing accelerometer data for a specific event.
+
+    Writes the timestamp, calculated relative time (based on sample count and
+    configured accelerometer sampling rate), X, Y, Z, and Magnitude for each
+    accelerometer sensor during the event to a CSV file within the specified
+    event folder.
+
+    Args:
+        event_data (list[dict]): The buffered data collected for the event.
+        event_folder (str): The path to the directory where the event's files
+            are stored.
+        config (SystemConfig or SimulatorConfig): The system configuration object,
+            used for `num_accelerometers` and `sampling_rate_acceleration`.
+
+    Returns:
+        str or None: The full path to the created CSV file, or None if an error occurred.
+    """
     acceleration_file = os.path.join(event_folder, 'acceleration.csv')
     
     try:
@@ -327,7 +430,6 @@ def create_acceleration_csv(event_data, event_folder, config):
                 else:
                      # Optionally log missing data or handle differently
                     logging.debug(f"Skipping data point due to missing Accelerometer data: {data.get('timestamp')}")
-
 
             # Write all collected rows at once
             if rows_to_write:

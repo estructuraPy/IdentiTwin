@@ -1,28 +1,17 @@
-"""
-System monitoring module for the IdentiTwin system.
+"""System monitoring core module for the IdentiTwin system.
 
-This module provides high-level system monitoring functionality including:
-- Sensor data acquisition
-- Data queue management
-- System health monitoring
-- Performance tracking
-- Status reporting
-- Error handling
+Provides the main `MonitoringSystem` class that orchestrates sensor setup,
+data acquisition, queue management, system health monitoring, performance
+tracking, status reporting, and error handling.
 
 Key Features:
-- Multi-threaded data acquisition
-- Real-time sensor monitoring
-- Performance statistics tracking
-- Automated sensor calibration
-- Data buffering and management
-- System status reporting
-- Error recovery mechanisms
-
-Classes:
-    MonitoringSystem: Main class for system-level monitoring
-
-The module serves as the central coordinator for the entire monitoring
-system, managing all aspects of data acquisition and system operation.
+    - Multi-threaded data acquisition for concurrent sensor reading.
+    - Real-time sensor monitoring and data buffering.
+    - Performance statistics tracking (sampling rate, jitter).
+    - Automated sensor calibration integration.
+    - System status reporting via console output.
+    - Error handling and recovery mechanisms for sensor communication.
+    - Integration with event detection and performance monitoring modules.
 """
 
 import os
@@ -43,23 +32,48 @@ from . import processing_data, processing_analysis
 from . import calibration
 
 class MonitoringSystem:
-    """
-    System-level monitoring class for the IdentiTwin system.
-    Handles sensor setup, data acquisition, and system-level operations.
+    """Manages the overall structural monitoring process.
+
+    Handles sensor initialization, starts data acquisition threads, manages
+    data flow, coordinates event monitoring, tracks performance, and provides
+    methods for starting, stopping, and cleaning up the system.
+
+    Attributes:
+        config (SystemConfig or SimulatorConfig): Configuration object holding
+            system parameters and settings.
+        running (bool): Flag indicating if the monitoring system is active.
+        data_queue (deque): Queue for storing raw sensor data packets.
+        acquisition_thread (threading.Thread): Thread for acquiring data from sensors.
+        event_thread (threading.Thread): Thread for monitoring events.
+        event_monitor (EventMonitor): Instance for detecting and handling events.
+        event_count (int): Counter for detected events.
+        sensors_initialized (bool): Flag indicating if sensors have been set up.
+        last_status_time (float): Timestamp of the last status printout.
+        status_interval (float): Interval (in seconds) for printing status updates.
+        ads (object): Instance of the ADS1115 ADC (or dummy).
+        lvdt_channels (list): List of LVDT channel objects (or dummy).
+        accelerometers (list): List of accelerometer objects (or dummy).
+        status_led (gpiozero.LED or None): Hardware LED for system status.
+        activity_led (gpiozero.LED or None): Hardware LED for recording/activity status.
+        accel_io_error_counts (list): Counters for consecutive I/O errors per accelerometer.
+        accel_io_error_log_threshold (int): Threshold for logging repeated I/O errors.
+        performance_stats (dict): Dictionary storing performance metrics like
+            sampling rates and timestamps.
+        last_lvdt_readings (list): Stores the most recent LVDT readings.
+        display_buffer (dict): Buffer for data used in status updates to avoid
+            using potentially stale `last_lvdt_readings`.
+        lvdt_calibration (list): List storing calibration parameters for LVDTs.
     """
 
     def __init__(self, config):
-        """
-        Initialize the monitoring system with the provided configuration.
+        """Initializes the MonitoringSystem.
+
+        Sets up internal state, queues, buffers, and performance tracking
+        structures based on the provided configuration.
 
         Args:
-            config: Configuration object for the system.
-
-        Returns:
-            None
-
-        Assumptions:
-            - The configuration object (config) is properly initialized and contains necessary parameters.
+            config (SystemConfig or SimulatorConfig): The configuration object
+                containing all settings for the monitoring session.
         """
         self.config = config
         self.running = False
@@ -113,9 +127,15 @@ class MonitoringSystem:
         self.lvdt_calibration = []  # Lista para almacenar calibración de LVDTs
 
     def setup_sensors(self):
-        """
-        Initializes and configures the sensors (LVDTs and accelerometers) and LEDs.
-        Handles cases where hardware might not be available.
+        """Initializes and configures sensors and hardware components.
+
+        Sets up LVDTs (via ADS1115), accelerometers (MPU6050), and hardware
+        LEDs based on the configuration. Handles potential hardware errors
+        or unavailability (simulation mode).
+
+        Raises:
+            Exception: If a critical error occurs during sensor setup that
+                       prevents the system from proceeding.
         """
         print("\n========================= Setting up sensors =========================\n")
         try:
@@ -196,10 +216,10 @@ class MonitoringSystem:
 
 
     def start_monitoring(self):
-        """
-        Start the monitoring system.
-        Initializes threads for data acquisition and starts hardware components.
-        Sets system running state and controls status LED.
+        """Starts the data acquisition and event monitoring threads.
+
+        Sets the system state to running, turns on the status LED (if available),
+        and launches the background threads for data collection and event detection.
         """
         if not self.sensors_initialized:
             print("Error: Sensors are not initialized. Call setup_sensors() first.")
@@ -244,9 +264,10 @@ class MonitoringSystem:
             print("Event monitoring thread started.")
 
     def stop_monitoring(self):
-        """
-        Stop the monitoring system.
-        Terminates threads, turns off LEDs, and resets system running state.
+        """Stops the monitoring system and associated threads.
+
+        Sets the running flag to False, waits for acquisition and event threads
+        to join, turns off hardware LEDs, and updates the final event count.
         """
         print("Stopping monitoring system...")
         self.running = False
@@ -281,23 +302,19 @@ class MonitoringSystem:
         print("Monitoring system stopped.")
 
     def cleanup(self):
-        """
-        Clean up resources used by the monitoring system.
-        Closes plots and releases hardware resources.
+        """Stops monitoring and releases resources.
 
-        Returns:
-            None
+        Calls `stop_monitoring()` and closes any open Matplotlib plots.
         """
         self.stop_monitoring()
         plt.close("all")
         print("Resources cleaned up.")
 
     def wait_for_completion(self):
-        """
-        Wait for monitoring to complete (blocks until interrupted).
+        """Blocks execution until monitoring is stopped.
 
-        Returns:
-            None
+        Useful for keeping the main thread alive while background threads run.
+        Typically interrupted by Ctrl+C, which triggers `stop_monitoring`.
         """
         try:
             while self.running:
@@ -307,9 +324,13 @@ class MonitoringSystem:
             self.stop_monitoring()
 
     def _data_acquisition_thread(self):
-        """
-        Thread for data acquisition from sensors.
-        Collects raw sensor data, enqueues it, and controls the physical activity/recording LED (blinking).
+        """Background thread function for continuous sensor data acquisition.
+
+        Reads data from enabled LVDT and accelerometer sensors at their respective
+        target sampling rates using precise timing. Enqueues the collected data
+        packet into `data_queue`. Manages the physical activity/recording LED
+        (blinking blue). Calculates and updates performance statistics periodically.
+        Handles sensor communication errors and attempts recovery.
         """
         if not self.sensors_initialized:
              print("Error: Data acquisition thread cannot start, sensors not initialized.", file=sys.stderr)
@@ -568,14 +589,14 @@ class MonitoringSystem:
             print("--- Data acquisition thread finished ---")
 
     def _precise_sleep(self, sleep_time):
-        """
-        Implements precise sleep using a combination of sleep and active waiting.
+        """Provides a more accurate sleep duration than `time.sleep()` alone.
+
+        Uses a combination of `time.sleep()` for the majority of the duration
+        and busy-waiting for the final millisecond to improve timing precision,
+        especially important for achieving target sampling rates.
 
         Args:
-            sleep_time: Time in seconds to sleep.
-
-        Returns:
-            None
+            sleep_time (float): The desired sleep duration in seconds.
         """
         if sleep_time <= 0:
             return
@@ -592,15 +613,17 @@ class MonitoringSystem:
             pass
 
     def _update_performance_stats(self, recent_accel_periods, recent_lvdt_periods):
-        """
-        Calculate performance statistics using provided recent periods.
+        """Calculates and updates sampling rate statistics.
+
+        Computes the mean sampling rate based on the collected inter-sample
+        periods for both accelerometers and LVDTs. Stores the results in
+        `self.performance_stats`.
 
         Args:
-            recent_accel_periods: Deque of recent accelerometer periods.
-            recent_lvdt_periods: Deque of recent LVDT periods.
-
-        Returns:
-            None
+            recent_accel_periods (deque): Deque containing recent time periods
+                between accelerometer samples.
+            recent_lvdt_periods (deque): Deque containing recent time periods
+                between LVDT samples.
         """
         if len(recent_accel_periods) > 1:
             periods_np = np.array(recent_accel_periods)
@@ -619,15 +642,16 @@ class MonitoringSystem:
             self.performance_stats["sampling_rate_lvdt"] = 0.0
 
     def _print_status(self, sensor_data):
-        """
-        Print current system status information.
-        Reads recording status from the state module.
+        """Prints a formatted system status update to the console.
+
+        Displays current time, measured sampling rates vs. targets, latest
+        sensor readings (LVDT voltage/displacement, accelerometer components),
+        event count, and recording status (including elapsed recording time).
+        Uses the `display_buffer` for recent sensor data if available and fresh.
 
         Args:
-            sensor_data: A dictionary containing sensor data from the latest acquisition.
-
-        Returns:
-            None
+            sensor_data (dict): The latest sensor data packet acquired. Used
+                primarily as a fallback if the display buffer is stale.
         """
         print("\n============================ System Status Update =============================\n")
         print(f"Time: {datetime.now().strftime('%H:%M:%S')}")
@@ -712,14 +736,14 @@ class MonitoringSystem:
         print("===============================================================================\n \n")
 
     def _format_elapsed_time(self, elapsed_seconds):
-        """
-        Format elapsed time in human-readable format.
+        """Formats a duration in seconds into a human-readable string (d, h, m, s).
 
         Args:
-            elapsed_seconds: Time in seconds.
+            elapsed_seconds (float): The duration in seconds.
 
         Returns:
-            Formatted time string.
+            str: A formatted string representing the elapsed time (e.g.,
+                 "1h 15m 30s", "45s").
         """
         minutes, seconds = divmod(int(elapsed_seconds), 60)
         hours, minutes = divmod(minutes, 60)

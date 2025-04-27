@@ -1,23 +1,23 @@
-"""
-State management module for the IdentiTwin monitoring system.
+"""Thread-safe state management for the IdentiTwin system.
 
-This module provides a thread-safe state management system for:
-- Sensor states
-- Event tracking
-- Configuration parameters
-- System operational states
+Provides global, thread-safe access to various state variables categorized into:
+    - Sensor states (e.g., calibration data)
+    - Event states (e.g., recording status, event count)
+    - Configuration parameters (read-only access to config)
+    - System operational states (e.g., running status)
 
-Key Features:
-- Thread-safe state access
-- Hierarchical state organization
-- Dynamic state updates
-- State persistence
-- State recovery
-- Configuration state management
-- Event state tracking
+Uses threading locks to ensure atomic updates and prevent race conditions
+when accessed from multiple threads (e.g., acquisition, event, visualization).
 
-The module ensures consistent state management across all system
-components with proper synchronization and access control.
+Attributes:
+    _sensor_state (dict): Stores sensor-related state variables.
+    _event_state (dict): Stores event-related state variables.
+    _config_state (dict): Stores configuration parameters.
+    _system_state (dict): Stores system-wide operational states.
+    _sensor_lock (threading.Lock): Lock for accessing `_sensor_state`.
+    _event_lock (threading.Lock): Lock for accessing `_event_state`.
+    _config_lock (threading.Lock): Lock for accessing `_config_state`.
+    _system_lock (threading.Lock): Lock for accessing `_system_state`.
 """
 import threading
 
@@ -35,55 +35,125 @@ _system_lock = threading.Lock() # Added lock for system state
 
 # Sensor state functions
 def set_sensor_variable(key, value):
-    """Set a sensor state variable."""
+    """Sets a sensor state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the sensor state variable.
+        value (any): The value to assign to the variable.
+    """
     with _sensor_lock:
         _sensor_state[key] = value
 
 def get_sensor_variable(key, default=None):
-    """Get a sensor state variable."""
+    """Gets a sensor state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the sensor state variable.
+        default (any, optional): The value to return if the key is not found.
+            Defaults to None.
+
+    Returns:
+        any: The value of the sensor state variable, or the default value if
+             the key is not found.
+    """
     with _sensor_lock:
         return _sensor_state.get(key, default)
 
 # Event state functions
 def set_event_variable(key, value):
-    """Set an event state variable."""
+    """Sets an event state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the event state variable.
+        value (any): The value to assign to the variable.
+    """
     with _event_lock:
         _event_state[key] = value
 
 def get_event_variable(key, default=None):
-    """Get an event state variable."""
+    """Gets an event state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the event state variable.
+        default (any, optional): The value to return if the key is not found.
+            Defaults to None.
+
+    Returns:
+        any: The value of the event state variable, or the default value if
+             the key is not found.
+    """
     with _event_lock:
         return _event_state.get(key, default)
 
 # Configuration state functions
 def set_config_variable(key, value):
-    """Set a configuration state variable."""
+    """Sets a configuration state variable in a thread-safe manner.
+
+    Note: Typically used internally during initialization. Modifying config
+          during runtime might have unintended consequences.
+
+    Args:
+        key (str): The name (key) of the configuration variable.
+        value (any): The value to assign to the variable.
+    """
     with _config_lock:
         _config_state[key] = value
 
 def get_config_variable(key, default=None):
-    """Get a configuration state variable."""
+    """Gets a configuration state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the configuration variable.
+        default (any, optional): The value to return if the key is not found.
+            Defaults to None.
+
+    Returns:
+        any: The value of the configuration variable, or the default value if
+             the key is not found.
+    """
     with _config_lock:
         return _config_state.get(key, default)
 
 def get_config():
-    """Get the entire configuration state."""
+    """Gets a copy of the entire configuration state dictionary.
+
+    Returns:
+        dict: A copy of the configuration state dictionary.
+    """
     with _config_lock:
         return dict(_config_state)
 
 # System state functions (New)
 def set_system_variable(key, value):
-    """Set a system state variable."""
+    """Sets a system state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the system state variable.
+        value (any): The value to assign to the variable.
+    """
     with _system_lock:
         _system_state[key] = value
 
 def get_system_variable(key, default=None):
-    """Get a system state variable."""
+    """Gets a system state variable in a thread-safe manner.
+
+    Args:
+        key (str): The name (key) of the system state variable.
+        default (any, optional): The value to return if the key is not found.
+            Defaults to None.
+
+    Returns:
+        any: The value of the system state variable, or the default value if
+             the key is not found.
+    """
     with _system_lock:
         return _system_state.get(key, default)
 
 def reset_state():
-    """Reset all state information (useful for testing)."""
+    """Resets all state dictionaries (sensor, event, config, system).
+
+    Useful primarily for testing purposes to ensure a clean state between tests.
+    """
     with _sensor_lock:
         _sensor_state.clear()
     with _event_lock:

@@ -1,24 +1,13 @@
-"""
-Report generation module for the IdentiTwin monitoring system.
+"""Report generation module for the IdentiTwin system.
 
-This module handles the creation of various system reports including:
-- System configuration reports
-- Event summaries
-- Performance reports
-- Calibration reports
-- Analysis summaries
+Handles the creation of various text-based reports summarizing system
+configuration, monitoring sessions, and detected events.
 
 Key Features:
-- Multiple report format support
-- Automated report generation
-- Event data summarization
-- Performance metric reporting
-- System configuration documentation
-- Temporal data organization
-- Report file management
-
-The module provides comprehensive reporting capabilities for system
-operation, events, and analysis results.
+    - Generation of system configuration reports.
+    - Generation of monitoring session summary reports including performance metrics.
+    - Summarization of detected events by reading individual event reports.
+    - File management for saving reports in the designated reports directory.
 """
 
 import os
@@ -26,7 +15,18 @@ import time
 from datetime import datetime
 
 def generate_system_report(config, filename):
-    """Generate a system configuration report."""
+    """Generates a system configuration report file.
+
+    Writes details about the operational mode, sensor configuration, sampling rates,
+    event detection parameters, and data storage locations to a text file.
+
+    Args:
+        config (SystemConfig or SimulatorConfig): The system configuration object.
+        filename (str): The full path where the report file should be saved.
+
+    Returns:
+        bool: True if the report was generated successfully, False otherwise.
+    """
     try:
         with open(filename, 'w') as f:
             f.write("# IdentiTwin System Report\n")
@@ -68,7 +68,20 @@ def generate_system_report(config, filename):
         return False
 
 def generate_summary_report(monitor_system, report_file):
-    """Generate and save a summary report of the monitoring session."""
+    """Generates a summary report of the monitoring session.
+
+    Writes session statistics (event count), performance metrics (sampling rates,
+    jitter - obtained from `monitor_system.performance_stats`), and a summary
+    of detected events (extracted from individual event report files) to a
+    text file.
+
+    Args:
+        monitor_system (MonitoringSystem): The main monitoring system instance.
+        report_file (str): The full path where the summary report should be saved.
+
+    Returns:
+        bool: True if the report was generated successfully, False otherwise.
+    """
     try:
         config = monitor_system.config
 
@@ -110,7 +123,17 @@ def generate_summary_report(monitor_system, report_file):
         return False
 
 def _add_event_summaries(file_obj, events_dir):
-    """Helper function to add event summaries to a report."""
+    """Helper function to add summaries of detected events to a report file.
+
+    Scans the specified events directory for event subfolders, sorts them,
+    and attempts to read key information (like peak values, duration) from
+    the 'report.txt' file within each event folder. Appends this summary
+    information to the provided file object.
+
+    Args:
+        file_obj (file): An open file object to write the summaries into.
+        events_dir (str): The path to the directory containing event subfolders.
+    """
     event_folders = [f for f in os.listdir(events_dir) if os.path.isdir(os.path.join(events_dir, f))]
     event_folders.sort()  # Sort chronologically
     

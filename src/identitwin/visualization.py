@@ -1,7 +1,23 @@
-"""
-Visualization module for real-time data display in the IdentiTwin system.
-Uses Dash/Plotly for efficient real-time plotting.
-Includes virtual LED indicators for system status and recording within each tab.
+"""Visualization module for real-time data display in IdentiTwin.
+
+Uses Dash/Plotly for efficient real-time plotting of sensor data.
+Includes virtual LED indicators within each tab to show system status
+(running/stopped) and recording status (event recording active/inactive).
+
+Attributes:
+    pio.templates.default (str): Default Plotly template for styling.
+    PALETTE (list): Color palette for plots.
+    MAX_POINTS (int): Maximum number of data points to display in time-series plots.
+    FFT_BUFFER_SIZE (int): Size of the buffer for FFT calculations (power of 2).
+    FFT_BUFFERS (dict): Dictionary storing FFT data buffers per sensor.
+    LVDT_BUFFER (dict): Dictionary storing real-time LVDT data buffers.
+    ACC_BUFFER (dict): Dictionary storing real-time accelerometer data buffers.
+    SENSOR_COLORS (list): Custom color set for sensor lines in plots.
+    COMPONENT_COLORS (dict): Base colors for accelerometer components (x, y, z).
+    LED_STYLE_BASE (dict): Base CSS style for LED indicators.
+    LED_STYLE_OFF (dict): CSS style for LED when off.
+    LED_STYLE_STATUS_ON (dict): CSS style for status LED when on.
+    LED_STYLE_RECORDING_ON (dict): CSS style for recording LED when on.
 """
 
 import dash
@@ -65,7 +81,16 @@ LED_STYLE_RECORDING_ON = {**LED_STYLE_BASE, 'backgroundColor': 'blue'}
 
 
 def _shade_color(hex_color, dark=False):
-    # darken by factor or leave as is
+    """Darkens a hex color code by a factor.
+
+    Args:
+        hex_color (str): The hex color code (e.g., '#FF5733').
+        dark (bool): If True, darken the color by a factor of 0.6.
+                     Otherwise, return the original color.
+
+    Returns:
+        str: The modified (or original) hex color code.
+    """
     hex_color = hex_color.lstrip('#')
     r, g, b = (int(hex_color[i:i+2],16) for i in (0,2,4))
     factor = 0.6 if dark else 1.0
@@ -73,7 +98,14 @@ def _shade_color(hex_color, dark=False):
     return f'#{r:02X}{g:02X}{b:02X}'
 
 def _create_led_indicators(tab_value):
-    """Helper function to create the HTML structure for LEDs with unique IDs per tab."""
+    """Creates the HTML structure for status and recording LEDs for a specific tab.
+
+    Args:
+        tab_value (str): The identifier for the tab (e.g., 'lvdt-tab', 'accel-tab').
+
+    Returns:
+        dash.html.Div: A Div element containing the LED indicators and labels.
+    """
     return html.Div([
         html.Span("System Status:", style={'verticalAlign': 'middle'}),
         # Use dictionary IDs for pattern matching
@@ -83,7 +115,20 @@ def _create_led_indicators(tab_value):
     ], style={'marginTop': '10px', 'marginBottom': '10px', 'textAlign': 'center'}) # Center LEDs
 
 def create_dashboard(system_monitor):
-    """Create and configure the Dash application, including LED indicators within each tab."""
+    """Creates and configures the Dash application layout.
+
+    Builds the dashboard structure with tabs for different sensor types
+    (LVDT, Accelerometer, FFT) based on the system configuration.
+    Includes LED indicators in each tab. Defines callbacks for updating
+    plots and LEDs based on interval triggers and user selections.
+
+    Args:
+        system_monitor (MonitoringSystem): The main monitoring system instance,
+            containing the configuration and state information.
+
+    Returns:
+        dash.Dash: The configured Dash application instance.
+    """
     app = dash.Dash(__name__, suppress_callback_exceptions=True) # Suppress exceptions for pattern matching if needed initially
 
     # Build tabs based on config options
@@ -494,7 +539,11 @@ def create_dashboard(system_monitor):
     return app
 
 def run_dashboard(system_monitor):
-    """Initialize and run the dashboard in a separate thread."""
+    """Initializes and runs the Dash dashboard application.
+
+    Args:
+        system_monitor (MonitoringSystem): The main monitoring system instance.
+    """
     app = create_dashboard(system_monitor)
 
     def run():

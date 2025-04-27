@@ -1,25 +1,17 @@
-"""
-Performance monitoring module for the IdentiTwin system.
+"""Performance monitoring module for the IdentiTwin system.
 
-This module tracks and analyzes system performance metrics including:
-- Sampling rate accuracy
-- Timing jitter
-- CPU and memory usage
-- System responsiveness
-- Data acquisition reliability
+Tracks and logs key performance indicators (KPIs) related to data acquisition
+timing and system resource usage.
 
 Key Features:
-- Real-time performance monitoring
-- Statistical analysis of timing accuracy
-- Resource usage tracking
-- Performance data logging
-- Alert generation for performance issues
+    - Real-time calculation of actual sampling rates for accelerometers and LVDTs.
+    - Calculation of timing jitter (standard deviation of sample periods).
+    - Optional tracking of CPU and memory usage (requires `psutil`).
+    - Logging of performance metrics to a CSV file at regular intervals.
+    - Provides status reports for display.
 
 Classes:
-    PerformanceMonitor: Main class for tracking system performance
-
-The module helps ensure reliable data acquisition and system operation by
-monitoring key performance indicators and alerting when issues arise.
+    PerformanceMonitor: Main class for tracking and logging performance.
 """
 import time
 import csv
@@ -30,25 +22,50 @@ from datetime import datetime
 from collections import deque
 import logging
 
-# performance_monitor.py
+# Check if psutil is available for resource monitoring
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
+    logging.warning("psutil not found. CPU and memory usage monitoring disabled.")
+
+# Define console color codes (consider moving to a central utility module)
+TITLE = "\033[95m"  # Purple
+CONTENT = "\033[94m" # Blue
+SPECIAL = "\033[93m" # Yellow
+RESET = "\033[0m"   # Reset color
+
 class PerformanceMonitor:
-    """Monitors and logs system performance metrics."""
+    """Monitors and logs system performance metrics like sampling rates and jitter.
+
+    Calculates actual sampling rates based on timestamps recorded via
+    `record_accel_timestamp` and `record_lvdt_timestamp`. Optionally logs these
+    metrics along with CPU/memory usage to a CSV file.
+
+    Attributes:
+        config (SystemConfig or SimulatorConfig): System configuration object.
+        log_file (str or None): Path to the performance log CSV file.
+        accel_timestamps (deque): Buffer storing recent accelerometer timestamps.
+        lvdt_timestamps (deque): Buffer storing recent LVDT timestamps.
+        accel_periods (deque): Buffer storing recent periods between accel samples.
+        lvdt_periods (deque): Buffer storing recent periods between LVDT samples.
+        stats (dict): Dictionary holding the latest calculated performance metrics
+            (sampling rates, jitter, cpu, memory, uptime).
+        running (bool): Flag indicating if the monitoring thread is active.
+        monitor_thread (threading.Thread or None): Background thread for periodic
+            logging and resource usage checks.
+    """
 
     def __init__(self, config, log_file=None):
-        """
-        Initialize the performance monitor.
+        """Initializes the PerformanceMonitor.
 
         Args:
-            config: Configuration object containing system settings.
-            log_file: Path to the log file for performance data (optional).
-
-        Returns:
-            None
-
-        Assumptions:
-            - The configuration object has attributes for sampling rates and jitter thresholds.
+            config (SystemConfig or SimulatorConfig): Configuration object with
+                sampling rate targets.
+            log_file (str, optional): Path to the CSV file for logging performance
+                data. If None, logging to file is disabled. Defaults to None.
         """
-
         self.config = config
         self.log_file = log_file
 
@@ -79,12 +96,7 @@ class PerformanceMonitor:
         self.monitor_thread = None
 
     def _init_log_file(self):
-        """
-        Initialize the performance log file.
-
-        Returns:
-            None
-        """
+        """Initializes the performance log CSV file with a header row."""
         try:
             with open(self.log_file, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -104,12 +116,7 @@ class PerformanceMonitor:
             logging.error(f"Error initializing log file: {e}")
 
     def start(self):
-        """
-        Start performance monitoring.
-
-        Returns:
-            None
-        """
+        """Starts the background performance monitoring thread."""
         if self.running:
             return
         self.running = True
@@ -120,25 +127,22 @@ class PerformanceMonitor:
         print(f"{TITLE}Performance monitoring started")
 
     def stop(self):
-        """
-        Stop performance monitoring.
-
-        Returns:
-            None
-        """
+        """Stops the background performance monitoring thread."""
         self.running = False
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=1.0)
 
     def record_accel_timestamp(self, timestamp=None):
-        """
-        Record accelerometer acquisition timestamp.
+        """Records an accelerometer acquisition timestamp.
+
+        Appends the timestamp to `accel_timestamps`, calculates the period
+        since the last sample, appends it to `accel_periods`, and triggers
+        a statistics update if enough periods are collected.
 
         Args:
-            timestamp: Timestamp to record (optional, defaults to current time).
-
-        Returns:
-            None
+            timestamp (float, optional): The timestamp (preferably from
+                `time.perf_counter()`) to record. If None, the current time
+                is used. Defaults to None.
         """
         if timestamp is None:
             timestamp = time.perf_counter()
@@ -150,14 +154,16 @@ class PerformanceMonitor:
             self._update_accel_stats()
 
     def record_lvdt_timestamp(self, timestamp=None):
-        """
-        Record LVDT acquisition timestamp.
+        """Records an LVDT acquisition timestamp.
+
+        Appends the timestamp to `lvdt_timestamps`, calculates the period
+        since the last sample, appends it to `lvdt_periods`, and triggers
+        a statistics update if enough periods are collected.
 
         Args:
-            timestamp: Timestamp to record (optional, defaults to current time).
-
-        Returns:
-            None
+            timestamp (float, optional): The timestamp (preferably from
+                `time.perf_counter()`) to record. If None, the current time
+                is used. Defaults to None.
         """
         if timestamp is None:
             timestamp = time.perf_counter()
@@ -169,11 +175,11 @@ class PerformanceMonitor:
             self._update_lvdt_stats()
 
     def _update_accel_stats(self):
-        """
-        Update accelerometer performance statistics.
+        """Updates accelerometer sampling rate and jitter statistics.
 
-        Returns:
-            None
+        Calculates the mean sampling rate and standard deviation of periods (jitter)
+        from the `accel_periods` buffer. Stores results in `self.stats`.
+        Prints a warning if the measured rate deviates significantly from the target.
         """
         if len(self.accel_periods) > 0:
             periods = np.array(self.accel_periods)
@@ -181,6 +187,10 @@ class PerformanceMonitor:
             self.stats["sampling_rate_acceleration"] = (
                 1.0 / mean_period if mean_period > 0 else 0
             )
+            # Calculate jitter (standard deviation of periods in milliseconds)
+            jitter_ms = np.std(periods) * 1000
+            self.stats["accel_jitter"] = jitter_ms
+
             target_rate = self.config.sampling_rate_acceleration
             if (
                 target_rate
@@ -191,16 +201,20 @@ class PerformanceMonitor:
                 )
 
     def _update_lvdt_stats(self):
-        """
-        Update LVDT performance statistics.
+        """Updates LVDT sampling rate and jitter statistics.
 
-        Returns:
-            None
+        Calculates the mean sampling rate and standard deviation of periods (jitter)
+        from the `lvdt_periods` buffer. Stores results in `self.stats`.
+        Prints a warning if the measured rate deviates significantly from the target.
         """
         if len(self.lvdt_periods) > 0:
             periods = np.array(self.lvdt_periods)
             mean_period = np.mean(periods)
             self.stats["sampling_rate_lvdt"] = 1.0 / mean_period if mean_period > 0 else 0
+            # Calculate jitter (standard deviation of periods in milliseconds)
+            jitter_ms = np.std(periods) * 1000
+            self.stats["lvdt_jitter"] = jitter_ms
+
             target_rate = self.config.sampling_rate_lvdt
             if (
                 target_rate
@@ -211,11 +225,10 @@ class PerformanceMonitor:
                 )
 
     def _monitor_thread(self):
-        """
-        Thread for monitoring system resources and logging performance.
+        """Background thread for periodic performance logging and resource checks.
 
-        Returns:
-            None
+        Periodically updates uptime, checks CPU/memory usage (if `psutil` is
+        available), and calls `_log_performance` if file logging is enabled.
         """
         last_log_time = time.time()
         log_interval = 5.0  # Log every 5 seconds
@@ -235,12 +248,7 @@ class PerformanceMonitor:
                 time.sleep(5.0)
 
     def _log_performance(self):
-        """
-        Log performance data to file.
-
-        Returns:
-            None
-        """
+        """Logs the current performance statistics to the CSV file."""
         if not self.log_file:
             return
         try:
@@ -266,11 +274,13 @@ class PerformanceMonitor:
             logging.error(f"Error logging performance data: {e}")
 
     def get_status_report(self):
-        """
-        Get a formatted status report for display.
+        """Generates a list of strings summarizing the current performance status.
+
+        Formats the latest sampling rates, jitter, resource usage (if available),
+        and uptime for display.
 
         Returns:
-            A list of strings, each representing a line in the status report.
+            list[str]: A list of formatted strings suitable for printing as a status report.
         """
         report = []
         report.append(
