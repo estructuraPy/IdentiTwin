@@ -90,8 +90,6 @@ class MonitoringSystem:
             "last_lvdt_time": None,
             "sampling_rate_acceleration": 0.0,
             "sampling_rate_lvdt": 0.0,
-            "accel_jitter": 0.0,
-            "lvdt_jitter": 0.0,
         }
 
         self.last_lvdt_readings = []
@@ -621,20 +619,16 @@ class MonitoringSystem:
             mean_period = np.mean(periods_np)
             std_dev_period = np.std(periods_np)
             self.performance_stats["sampling_rate_acceleration"] = 1.0 / mean_period if mean_period > 0 else 0.0
-            self.performance_stats["accel_jitter"] = std_dev_period * 1000.0
         else:
             self.performance_stats["sampling_rate_acceleration"] = 0.0
-            self.performance_stats["accel_jitter"] = 0.0
 
         if len(recent_lvdt_periods) > 1:
             periods_np = np.array(recent_lvdt_periods)
             mean_period = np.mean(periods_np)
             std_dev_period = np.std(periods_np)
             self.performance_stats["sampling_rate_lvdt"] = 1.0 / mean_period if mean_period > 0 else 0.0
-            self.performance_stats["lvdt_jitter"] = std_dev_period * 1000.0
         else:
             self.performance_stats["sampling_rate_lvdt"] = 0.0
-            self.performance_stats["lvdt_jitter"] = 0.0
 
     def _print_status(self, sensor_data):
         """
@@ -652,15 +646,11 @@ class MonitoringSystem:
         print("Performance:")
         if self.config.enable_accel:
             accel_rate_measured = self.performance_stats.get("sampling_rate_acceleration", 0.0)
-            accel_jitter_measured = self.performance_stats.get("accel_jitter", 0.0)
             print(f"  Accel Rate: {accel_rate_measured:.2f} Hz (Target: {self.config.sampling_rate_acceleration:.1f} Hz)")
-            print(f"  Accel Jitter: {accel_jitter_measured:.2f} ms")
 
         if self.config.enable_lvdt:
             lvdt_rate_measured = self.performance_stats.get("sampling_rate_lvdt", 0.0)
-            lvdt_jitter_measured = self.performance_stats.get("lvdt_jitter", 0.0)
             print(f"  LVDT Rate: {lvdt_rate_measured:.2f} Hz (Target: {self.config.sampling_rate_lvdt:.1f} Hz)")
-            print(f"  LVDT Jitter: {lvdt_jitter_measured:.2f} ms")
 
         if self.config.enable_lvdt:
             print("\nLVDT Status:")
@@ -726,15 +716,7 @@ class MonitoringSystem:
             avg_disp = self.event_monitor.moving_avg_disp
             detrig_accel = self.config.detrigger_acceleration_threshold
             detrig_disp = self.config.detrigger_displacement_threshold
-            
-            if self.config.enable_accel:
-                print(f"\nAcceleration Moving Average: {avg_accel:.3f}")
-                print(f"Individual trigger: {self.config.trigger_acceleration_threshold:.3f}m/s^2, Average detrigger: {detrig_accel:.3f}m/s^2")
-                
-            if self.config.enable_lvdt:
-                print(f"\nDisplacement Moving Average: {avg_disp:.3f}")
-                print(f"Individual trigger: {self.config.trigger_displacement_threshold:.3f}mm, Average detrigger: {detrig_disp:.3f}mm")
-                
+
 
         print("\n===============================================================================")
         print("---  Press 'Ctrl + C' to stop monitoring ---")

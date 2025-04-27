@@ -180,7 +180,6 @@ class PerformanceMonitor:
             self.stats["sampling_rate_acceleration"] = (
                 1.0 / mean_period if mean_period > 0 else 0
             )
-            self.stats["accel_jitter"] = np.std(periods) * 1000  # in ms
             target_rate = self.config.sampling_rate_acceleration
             if (
                 target_rate
@@ -188,10 +187,6 @@ class PerformanceMonitor:
             ):
                 print(
                     f"{SPECIAL}WARNING: Accelerometer rate {self.stats['sampling_rate_acceleration']:.1f}Hz differs from target {target_rate}Hz"
-                )
-            if self.stats["accel_jitter"] > self.config.max_accel_jitter:
-                print(
-                    f"{SPECIAL}WARNING: High accelerometer jitter: {self.stats['accel_jitter']:.2f}ms"
                 )
 
     def _update_lvdt_stats(self):
@@ -205,7 +200,6 @@ class PerformanceMonitor:
             periods = np.array(self.lvdt_periods)
             mean_period = np.mean(periods)
             self.stats["sampling_rate_lvdt"] = 1.0 / mean_period if mean_period > 0 else 0
-            self.stats["lvdt_jitter"] = np.std(periods) * 1000  # in ms
             target_rate = self.config.sampling_rate_lvdt
             if (
                 target_rate
@@ -213,10 +207,6 @@ class PerformanceMonitor:
             ):
                 print(
                     f"{SPECIAL}WARNING: LVDT rate {self.stats['sampling_rate_lvdt']:.1f}Hz differs from target {target_rate}Hz"
-                )
-            if self.stats["lvdt_jitter"] > self.config.max_lvdt_jitter:
-                print(
-                    f"{SPECIAL}WARNING: High LVDT jitter: {self.stats['lvdt_jitter']:.2f}ms"
                 )
 
     def _monitor_thread(self):

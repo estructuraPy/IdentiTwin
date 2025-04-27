@@ -157,7 +157,6 @@ class EventMonitor:
             accel_trigger = any(mag > trigger_accel for mag in accel_magnitudes)
             lvdt_trigger = any(disp > trigger_disp for disp in disp_values)
 
-            # --- Reemplazamos aquí la condición de detrigger ---
             # Use moving averages to determine detrigger
             accel_below_detrigger = self.moving_avg_accel < detrigger_accel
             lvdt_below_detrigger = self.moving_avg_disp < detrigger_disp
