@@ -47,7 +47,6 @@ from identitwin import configurator
 from identitwin.system_monitoring import MonitoringSystem
 from identitwin import calibration
 from identitwin import report_generator
-from identitwin.calibration import calibrate_lvdt_channels
 from identitwin import state # <--- IMPORT STATE MODULE
 
 # Default values for sampling rates and thresholds.
@@ -230,50 +229,6 @@ def get_operation_mode_name():
     else:
         return "No Sensors Mode (Invalid)"
 
-
-def create_system_config():
-    """Create a SystemConfig object with current settings.
-
-    Args:
-        None
-
-    Returns:
-        configurator.SystemConfig: System configuration object.
-    """
-    
-    gpio_pins_list = [STATUS_PIN, ACTIVITY_PIN]
-
-    from identitwin.configurator import SystemConfig
-    config = SystemConfig(
-        enable_lvdt=enable_lvdt,
-        enable_accel=enable_accel,
-        sampling_rate_acceleration=ACCEL_SAMPLING_RATE,
-        sampling_rate_lvdt=LVDT_SAMPLING_RATE,
-        plot_refresh_rate=PLOT_REFRESH_RATE,
-        gpio_pins=gpio_pins_list,
-        output_dir=None,
-        num_lvdts=NUM_LVDTS,
-        num_accelerometers=NUM_ACCELS,
-        lvdt_slopes=LVDT_SLOPES,
-        trigger_acceleration_threshold=ACCEL_TRIGGER_THRESHOLD,
-        detrigger_acceleration_threshold=ACCEL_DETRIGGER_THRESHOLD,
-        trigger_displacement_threshold=DISPLACEMENT_TRIGGER_THRESHOLD,
-        detrigger_displacement_threshold=DISPLACEMENT_DETRIGGER_THRESHOLD,
-        pre_event_time=PRE_EVENT_TIME,
-        post_event_time=POST_EVENT_TIME,
-        min_event_duration=MIN_EVENT_DURATION,
-        )
-    
-    # Configure LVDT pins explicitly
-    try:
-        import adafruit_ads1x15.ads1115 as ADS
-
-        config.lvdt_pin_config = [ADS.P0, ADS.P1]
-        print(f"LVDT pins configured: {[0, 1]}")
-    except ImportError:
-        print("Warning: Could not import ADS1115 for pin configuration - using defaults")
-    
-    return config
 
 def main():
     """Main function to initialize and run the monitoring system."""

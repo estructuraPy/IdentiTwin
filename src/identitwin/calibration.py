@@ -243,12 +243,3 @@ def _save_calibration_data(config, lvdt_systems=None, accel_offsets=None):
     except Exception as e:
         print(f"\nError saving calibration data: {e}\n")
         return None
-
-def calibrate_lvdt_channels(channels, slopes):
-    """Calibrate each LVDT channel independently."""
-    for i, (channel, slope) in enumerate(zip(channels, slopes)):
-        voltage = channel.voltage
-        intercept = -slope * voltage
-        print(f" - LVDT-{i+1} zeroing parameters: slope={slope:.4f}, intercept={intercept:.4f} at voltage={voltage:.4f}")
-        channel.set_calibration(slope, intercept)  # Almacenar la calibración en el canal
-    return channels

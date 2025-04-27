@@ -339,9 +339,6 @@ class SystemConfig:
         return mpu_list if mpu_list else None  # Return list or None if empty
 
 # Utility functions
-# Removed leds() function
-
-# Removed ads1115() function
 
 def thresholds(trigger_acceleration, trigger_displacement, pre_time, enable_accel, enable_lvdt):
     """Initialize thresholds for event detection."""

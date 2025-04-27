@@ -25,9 +25,6 @@ pio.templates.default = "plotly_dark"
 
 PALETTE = ['#A97830','#296F8C', '#BCBEC0', '#000000']
 
-# Store historical LVDT/ACC data for scatter plots (legacy, unused)
-LVDT_HISTORY = {}
-ACC_HISTORY = {}          
 MAX_POINTS = 3000        
 # Añadir buffer FFT potencia de 2
 FFT_BUFFER_SIZE = 1024  # potencia de 2 >= muestras necesarias

@@ -435,7 +435,21 @@ def write_event_report(report_file, timestamp_str, duration, max_x, max_y, max_z
             f.write(f"  - {os.path.basename(accel_file)}\n")
         if lvdt_file and config and config.enable_lvdt:
             f.write(f"  - {os.path.basename(lvdt_file)}\n")
-        f.write(f"  - {os.path.basename(plot_file)}\n")
+            
+        # Include all generated plot files
+        plot_files = []
+        if config and config.enable_accel:
+            for accel_idx in range(config.num_accelerometers):
+                accel_plot_file = f"{os.path.splitext(plot_file)[0]}_accel{accel_idx+1}.png"
+                if os.path.exists(accel_plot_file):
+                    plot_files.append(accel_plot_file)
+        if config and config.enable_lvdt:
+            lvdt_plot_file = f"{os.path.splitext(plot_file)[0]}_lvdt_all.png"
+            if os.path.exists(lvdt_plot_file):
+                plot_files.append(lvdt_plot_file)
+        
+        for pfile in plot_files:
+             f.write(f"  - {os.path.basename(pfile)}\n")
 
 def generate_fft_plot(np_data, fs, filename_template, config):
     """
