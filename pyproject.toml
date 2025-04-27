@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "identitwin"
-version = "0.0.66"
-description = "Digital Twin system for structural monitoring."
-authors = ["Your Name <you@example.com>"] # Replace with actual author info
+version = "0.1.0"
+description = "IdentiTwin a system for structural monitoring."
+authors = ["Ing. Angel Navarro-Mora M.Sc <ahnavarro@itcr.ac.cr>", "Alvaro Perez-Mora <alvaroenrique2001@estudiantec.cr>"] # Updated author info
 readme = "README.md" # Assuming you have a README.md
 
 [tool.poetry.dependencies]
