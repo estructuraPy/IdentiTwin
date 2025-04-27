@@ -1,4 +1,4 @@
-# Core dependencies needed to install the package
+# Core dependencies (needed for importing the package during doc generation)
 numpy>=1.24.0
 matplotlib>=3.7.1
 pandas>=2.0.0
@@ -12,6 +12,3 @@ sphinx-rtd-theme>=2.0.0
 sphinx-autodoc-typehints>=1.25.2
 myst-parser>=2.0.0
 sphinx-autoapi>=3.0.0
-
-# Install the package itself in editable mode
--e ..
