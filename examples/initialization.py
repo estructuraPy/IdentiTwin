@@ -57,7 +57,7 @@ WINDOW_DURATION = 15.0  # seconds for relative time window in plots
 
 NUM_LVDTS = 2
 NUM_ACCELS = 2
-LVDT_SLOPES = [19.86, 21.86]
+LVDT_SLOPES = [30.583, 20.191]
 
 ACCEL_TRIGGER_THRESHOLD = 0.981  # m/sSetting up^2 (0.1g)
 ACCEL_DETRIGGER_THRESHOLD = 0.589  # m/s^2 (60% of trigger threshold)
