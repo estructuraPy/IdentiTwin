@@ -21,7 +21,7 @@ Project Information
     * Alvaro Perez-Mora (alvaroenrique2001@estudiantec.cr)
 :Organization: Instituto Tecnológico de Costa Rica (ITCR)
 :Copyright: 2025, Instituto Tecnológico de Costa Rica (ITCR)
-:Version: 0.0.1
+:Version: 0.1.0
 :License: MIT
 
 Core Modules

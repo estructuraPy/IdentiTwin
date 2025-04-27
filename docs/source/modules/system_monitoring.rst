@@ -9,37 +9,17 @@ System Monitoring
 Overview
 --------
 
-The ``system_monitoring`` module provides tools for monitoring system resources and performance:
+The ``system_monitoring`` module (placeholder) is intended to provide tools for monitoring system resources and overall performance. Currently, specific functionalities like detailed CPU, memory, disk, or network monitoring are primarily handled by the ``performance_monitor`` module, which focuses on acquisition timing and basic resource usage (CPU/Memory via psutil if available).
 
-* CPU usage monitoring and analysis
-* Memory usage tracking
-* Disk space monitoring
-* Network traffic analysis
-* Process monitoring capabilities
-* System health metrics collection
-* Performance data visualization
-* Alert generation for resource thresholds
-
-Key Features
+Key Features (Conceptual / Covered by other modules)
 -----------
 
-Resource Monitoring
-~~~~~~~~~~~~~~~~~~
-* Real-time CPU utilization tracking
-* Memory usage statistics
-* Disk space and I/O monitoring
-* Network bandwidth usage
+* Resource Monitoring (Partially covered by `performance_monitor`)
+    - Real-time CPU utilization tracking
+    - Memory usage statistics
 
-Performance Analysis
-~~~~~~~~~~~~~~~~~~
-* Historical performance data collection
-* Trend analysis
-* Performance bottleneck identification
-* Resource usage patterns detection
+* Performance Analysis (Partially covered by `performance_monitor`)
+    - Data acquisition performance metrics (sampling rate, jitter)
 
-Alert System
-~~~~~~~~~~~
-* Configurable threshold alerts
-* Resource usage warnings
-* System health notifications
-* Critical event detection
+* Alert System (Partially covered by `event_monitoring`)
+    - Event detection based on sensor thresholds

@@ -9,20 +9,14 @@ Performance Monitoring
 Overview
 --------
 
-The ``performance_monitor`` module provides system performance tracking and monitoring capabilities:
-
-* CPU and memory usage monitoring
-* Data acquisition performance metrics
-* Sensor response time analysis
-* System health checks
-* Resource utilization tracking
+The ``performance_monitor`` module tracks and logs key performance indicators (KPIs) for the IdentiTwin system, focusing on data acquisition timing and system resource usage. It provides the `PerformanceMonitor` class for these tasks.
 
 Key Features
 -----------
 
-* Real-time performance metrics
-* Resource usage optimization
-* Performance bottleneck detection
-* System health status reporting
-* Performance data logging
-* Automated alerts for performance issues
+* Real-time sampling rate calculation: Determines actual sampling rates for accelerometers and LVDTs based on timestamps.
+* Timing jitter calculation: Measures the standard deviation of sample periods (jitter) in milliseconds.
+* Resource monitoring (optional): Tracks CPU and memory usage if the `psutil` library is available.
+* Performance logging: Logs metrics (rates, jitter, CPU/memory usage, uptime) to a CSV file at regular intervals.
+* Status reporting: Generates formatted strings summarizing current performance for display.
+* Background operation: Runs monitoring tasks in a separate thread.

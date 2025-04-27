@@ -9,31 +9,13 @@ State Management
 Overview
 --------
 
-The ``state`` module provides thread-safe state management for the monitoring system:
-
-* Thread-safe state variables management
-* Hierarchical state organization
-* Dynamic state updates and access
+The ``state`` module provides global, thread-safe management for various state variables within the IdentiTwin system. It ensures atomic updates and prevents race conditions when state is accessed concurrently from different threads (e.g., acquisition, event monitoring, visualization). State variables are categorized for clarity.
 
 Key Components
 ------------
 
-* Sensor State Management
-    - Thread-safe sensor variable storage
-    - Dynamic sensor state updates
-    - Concurrent access management
-
-* Event State Tracking
-    - Event variable management
-    - Event state persistence
-    - State recovery mechanisms
-
-* Configuration State
-    - System configuration storage
-    - Runtime configuration updates
-    - Configuration state access
-
-* Visualization State
-    - Plotting state variables
-    - Display configuration
-    - Real-time visualization state
+* Sensor State: Stores sensor-related variables (e.g., calibration data). Access controlled by `_sensor_lock`.
+* Event State: Stores event-related variables (e.g., recording status, event count, trigger times). Access controlled by `_event_lock`.
+* Configuration State: Provides read-only access to configuration parameters. Access controlled by `_config_lock`.
+* System State: Stores system-wide operational states (e.g., overall running status). Access controlled by `_system_lock`.
+* Access Functions: Provides `set_*_variable` and `get_*_variable` functions for safe access to each state category.

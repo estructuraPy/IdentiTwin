@@ -116,33 +116,40 @@ pip install identitwin
     deactivate
     ```
 
-### Installation for Simulation/Development (Non-Raspberry Pi)
+## Setup
 
-1.  **Clone the Repository:**
+1.  **Prerequisites:** Ensure you have Python 3.9+ installed. Conda is recommended but optional.
+2.  **Clone the repository:**
     ```bash
-    git clone https://github.com/estructuraPy/IdentiTwin.git
-    cd IdentiTwin
+    git clone <repository_url>
+    cd identitwin
     ```
-2.  **Create and Activate Virtual Environment:**
-    ```bash
-    python -m venv venv
-    # On Windows:
-    .\venv\Scripts\activate
-    # On macOS/Linux:
-    source venv/bin/activate
-    ```
-3.  **Install:**
-    ```bash
-    pip install .
-    ```
-    *(Hardware-specific libraries will fail to install, which is expected)*
-4.  **Run in Simulation Mode:**
-    The `initialization.py` script should automatically detect a non-Raspberry Pi environment and run in simulation mode.
-    ```bash
-    cd examples
-    python initialization.py
-    ```
-    *(Or use the `--simulation` flag explicitly: `python initialization.py --simulation`)*
+3.  **Set up the environment:**
+    *   **Windows:** Double-click or run `setup_env\setup_env.bat` from the command prompt. This script will detect if Conda is available and create a Conda environment named `identitwin`. If Conda is not found, it will create a standard Python virtual environment (`venv`) in the project root. It will then install all necessary dependencies from `requirements.txt`.
+    *   **Linux/macOS:** Run `setup_env/setup_env.sh` (assuming this script exists or will be created with similar functionality).
+        ```bash
+        cd setup_env
+        bash setup_env.sh
+        cd ..
+        ```
+
+## Running the Application
+
+After setting up the environment, you can run the simulation or the main system using the provided scripts. These scripts automatically activate the correct virtual environment (Conda or venv) before execution.
+
+*   **Run Simulation:**
+    *   **Windows:** Double-click or run `run_simulation.bat`.
+    *   **Linux/macOS:** Run `run_simulation_linux.sh`.
+        ```bash
+        ./run_simulation_linux.sh
+        ```
+
+*   **Run System:**
+    *   **Linux/macOS:** Run `run_system_linux.sh`.
+        ```bash
+        ./run_system_linux.sh
+        ```
+
 
 ## Documentation
 
@@ -180,37 +187,3 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 This project implements the Identitwin system.
 
-## Setup
-
-1.  **Prerequisites:** Ensure you have Python 3.9+ installed. Conda is recommended but optional.
-2.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd identitwin
-    ```
-3.  **Set up the environment:**
-    *   **Windows:** Double-click or run `setup_env\setup_env.bat` from the command prompt. This script will detect if Conda is available and create a Conda environment named `identitwin`. If Conda is not found, it will create a standard Python virtual environment (`venv`) in the project root. It will then install all necessary dependencies from `requirements.txt`.
-    *   **Linux/macOS:** Run `setup_env/setup_env.sh` (assuming this script exists or will be created with similar functionality).
-        ```bash
-        cd setup_env
-        bash setup_env.sh
-        cd ..
-        ```
-
-## Running the Application
-
-After setting up the environment, you can run the simulation or the main system using the provided scripts. These scripts automatically activate the correct virtual environment (Conda or venv) before execution.
-
-*   **Run Simulation:**
-    *   **Windows:** Double-click or run `run_simulation.bat`.
-    *   **Linux/macOS:** Run `run_simulation_linux.sh`.
-        ```bash
-        ./run_simulation_linux.sh
-        ```
-
-*   **Run System:**
-    *   **Windows:** Double-click or run `run_system.bat`.
-    *   **Linux/macOS:** Run `run_system_linux.sh`.
-        ```bash
-        ./run_system_linux.sh
-        ```
