@@ -63,9 +63,9 @@ LED_STYLE_BASE = {
 }
 
 LED_STYLE_OFF = {**LED_STYLE_BASE, 'backgroundColor': 'black'}
-LED_STYLE_STATUS_ON = {**LED_STYLE_BASE, 'backgroundColor': 'lime'} # Brighter green
-LED_STYLE_RECORDING_ON = {**LED_STYLE_BASE, 'backgroundColor': 'cyan'} # Brighter blue
-# --- End LED Styles ---
+LED_STYLE_STATUS_ON = {**LED_STYLE_BASE, 'backgroundColor': 'lime'}
+LED_STYLE_RECORDING_ON = {**LED_STYLE_BASE, 'backgroundColor': 'blue'}
+
 
 def _shade_color(hex_color, dark=False):
     # darken by factor or leave as is
@@ -433,7 +433,10 @@ def create_dashboard(system_monitor):
         is_running = state.get_system_variable('system_running', False)
         style = LED_STYLE_STATUS_ON if is_running else LED_STYLE_OFF
         # Return a list of styles, one for each matched LED
-        num_leds = len(dash.callback_context.outputs_list) # Get number of matched outputs
+        # Check if callback_context is available (might not be on initial load)
+        num_leds = 1
+        if dash.callback_context.outputs_list:
+             num_leds = len(dash.callback_context.outputs_list)
         return [style] * num_leds
 
     @app.callback(
@@ -441,11 +444,27 @@ def create_dashboard(system_monitor):
         [Input('interval-component', 'n_intervals')]
     )
     def update_recording_led_style(n):
-        """Update the recording LED color based on event recording state."""
+        """Update the recording LED color based on event recording state (with blinking)."""
         is_recording = state.get_event_variable('is_event_recording', False)
-        style = LED_STYLE_RECORDING_ON if is_recording else LED_STYLE_OFF
+        style = LED_STYLE_OFF # Default to OFF
+
+        if is_recording:
+            blink_cycle_duration = 0.75  # 0.5s ON + 0.25s OFF
+            blink_on_duration = 0.5
+            current_time = time.time()
+            time_in_cycle = current_time % blink_cycle_duration
+            if time_in_cycle < blink_on_duration:
+                style = LED_STYLE_RECORDING_ON # ON style if in the first 0.5s
+            else:
+                style = LED_STYLE_OFF # OFF style if in the last 0.25s
+        else:
+            style = LED_STYLE_OFF # OFF if not recording
+
         # Return a list of styles, one for each matched LED
-        num_leds = len(dash.callback_context.outputs_list) # Get number of matched outputs
+        # Check if callback_context is available
+        num_leds = 1
+        if dash.callback_context.outputs_list:
+             num_leds = len(dash.callback_context.outputs_list)
         return [style] * num_leds
     # --- End Modified Callbacks ---
     

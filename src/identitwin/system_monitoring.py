@@ -309,7 +309,7 @@ class MonitoringSystem:
     def _data_acquisition_thread(self):
         """
         Thread for data acquisition from sensors.
-        Collects raw sensor data, enqueues it, and controls the physical activity/recording LED.
+        Collects raw sensor data, enqueues it, and controls the physical activity/recording LED (blinking).
         """
         if not self.sensors_initialized:
              print("Error: Data acquisition thread cannot start, sensors not initialized.", file=sys.stderr)
@@ -334,8 +334,12 @@ class MonitoringSystem:
             last_accel_actual_time = None
             last_lvdt_actual_time = None
 
+            blink_cycle_duration = 0.75  # 0.5s ON + 0.25s OFF
+            blink_on_duration = 0.5
+
             while self.running:
-                now = time.perf_counter()
+                now_perf = time.perf_counter() # Use perf_counter for blinking timing
+                now_time = time.time() # Use time for general timestamps and logging checks
                 sensor_data_packet = None
                 data_acquired = False
 
@@ -344,22 +348,27 @@ class MonitoringSystem:
                 if self.activity_led:
                     try:
                         if is_recording:
-                            self.activity_led.on() # Turn ON if recording
+                            # Calculate phase in blink cycle
+                            time_in_cycle = now_perf % blink_cycle_duration
+                            if time_in_cycle < blink_on_duration:
+                                self.activity_led.on() # Turn ON if in the first 0.5s
+                            else:
+                                self.activity_led.off() # Turn OFF if in the last 0.25s
                         else:
-                            self.activity_led.off() # Turn OFF if not recording
+                            self.activity_led.off() # Ensure LED is OFF if not recording
                     except Exception as e:
                         # Log infrequently to avoid flooding console
-                        if time.time() % 10 < 0.1: # Log roughly every 10 seconds
+                        if now_time % 10 < 0.1: # Log roughly every 10 seconds
                              print(f"Warning: Could not control activity LED: {e}", file=sys.stderr)
                 # --- End LED Control ---
 
 
-                if self.config.enable_accel and self.accelerometers and now >= next_accel_time:
+                if self.config.enable_accel and self.accelerometers and now_perf >= next_accel_time:
                     # Add a mutex or lock for accelerometer access
                     self.accel_lock = threading.Lock()
                     with self.accel_lock:
                         target_accel_time = loop_start_time + accel_sample_count * accel_interval
-                        sleep_needed = target_accel_time - now
+                        sleep_needed = target_accel_time - now_perf
                         if sleep_needed > 0:
                             self._precise_sleep(sleep_needed)
                         actual_accel_time = time.perf_counter()
@@ -430,12 +439,12 @@ class MonitoringSystem:
                         next_accel_time = loop_start_time + accel_sample_count * accel_interval
                         data_acquired = True
 
-                elif self.config.enable_lvdt and self.lvdt_channels and now >= next_lvdt_time:
+                elif self.config.enable_lvdt and self.lvdt_channels and now_perf >= next_lvdt_time:
                     # Add similar timing logic as accelerometer
                     if last_lvdt_actual_time is not None:
-                        period = now - last_lvdt_actual_time
+                        period = now_perf - last_lvdt_actual_time
                         self.performance_stats["lvdt_periods"].append(period)
-                    last_lvdt_actual_time = now
+                    last_lvdt_actual_time = now_perf
 
                     # Add a mutex or lock for LVDT access
                     self.lvdt_lock = threading.Lock()
@@ -526,13 +535,13 @@ class MonitoringSystem:
                         except Exception:
                             pass
 
-                if now - last_stats_update_time >= stats_interval:
+                if now_time - last_stats_update_time >= stats_interval:
                     self._update_performance_stats(
                         self.performance_stats["accel_periods"],
                         self.performance_stats["lvdt_periods"]
                     )
                     self._print_status(sensor_data_packet if sensor_data_packet else {})
-                    last_stats_update_time = now
+                    last_stats_update_time = now_time
 
                 if not data_acquired:
                     earliest_next_time = float('inf')
